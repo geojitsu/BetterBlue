@@ -229,7 +229,9 @@ struct DynamicIslandExpandedContentView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 } else {
-                    Text("\(context.attributes.vehicleName) • Updated \(context.state.status.lastUpdated, style: .time)")
+                    Text("\(context.attributes.vehicleName)")
+                    Spacer()
+                    Text("Updated \(context.state.status.lastUpdated, style: .time)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
