@@ -333,7 +333,7 @@ struct VehicleTitleView: View {
             if let lastUpdated = bbVehicle.lastUpdated {
                 StatusInfoRow(
                     icon: "arrow.clockwise",
-                    label: "Last Update",
+                    label: "Server Timestamp",
                     value: formatLastUpdated(lastUpdated)
                 )
             }
@@ -342,7 +342,7 @@ struct VehicleTitleView: View {
             if let syncDate = bbVehicle.syncDate {
                 StatusInfoRow(
                     icon: "car",
-                    label: "Car Synced",
+                    label: "Car Timestamp",
                     value: formatLastUpdated(syncDate)
                 )
             }
