@@ -183,6 +183,22 @@ struct MainView: View {
         }
     }
 
+    /// Map underneath, paged sheet on top.
+    @ViewBuilder
+    private var vehiclePager: some View {
+        ZStack(alignment: .bottom) {
+            SimpleMapView(
+                currentVehicle: currentVehicle,
+                mapRegion: $mapRegion,
+            )
+            VehicleSheetPager(
+                bbVehicles: displayedVehicles,
+                selectedVehicleIndex: $selectedVehicleIndex,
+                onSuccessfulRefresh: { lastError = nil }
+            )
+        }
+    }
+
     @ViewBuilder
     private var mainContent: some View {
         NavigationStack {
@@ -220,27 +236,11 @@ struct MainView: View {
                         lastError: $lastError,
                     )
                 } else {
-                    // Show map with content overlay when accounts exist
-                    ZStack {
-                        SimpleMapView(
-                            currentVehicle: currentVehicle,
-                            mapRegion: $mapRegion,
-                        )
-
-                        VStack {
-                            Spacer()
-                                .allowsHitTesting(false) // Allow map touches to pass through
-                            VehicleCardsView(
-                                displayedVehicles: displayedVehicles,
-                                accounts: accounts,
-                                selectedVehicleIndex: $selectedVehicleIndex,
-                                onSuccessfulRefresh: {
-                                    // Clear global error when any vehicle refresh succeeds
-                                    lastError = nil
-                                },
-                            )
-                        }
-                    }
+                    // Apple-Maps-style layout: map under, paged sheet
+                    // on top. `VehicleSheetPager` owns the horizontal
+                    // ScrollView that pages between vehicles, plus
+                    // the shared chrome (glass + drag handle).
+                    vehiclePager
                 }
             }
             .sheet(isPresented: $showingSettings) {

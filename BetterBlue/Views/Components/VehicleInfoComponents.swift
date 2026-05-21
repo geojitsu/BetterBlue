@@ -74,6 +74,7 @@ struct VehicleCustomizationSection: View {
     private var hasAnyOverride: Bool {
         bbVehicle.primaryColorName != nil
             || bbVehicle.chargingColorName != nil
+            || bbVehicle.gasColorName != nil
             || bbVehicle.lockColorName != nil
             || bbVehicle.unlockColorName != nil
             || bbVehicle.startClimateColorName != nil
@@ -82,6 +83,7 @@ struct VehicleCustomizationSection: View {
     private func resetAllColors() {
         bbVehicle.primaryColorName = nil
         bbVehicle.chargingColorName = nil
+        bbVehicle.gasColorName = nil
         bbVehicle.lockColorName = nil
         bbVehicle.unlockColorName = nil
         bbVehicle.startClimateColorName = nil
@@ -132,6 +134,13 @@ struct VehicleCustomizationSection: View {
                 selection: $bbVehicle.chargingColorName,
                 defaultName: "green",
                 previewStyle: .quickAction(symbol: "bolt.fill")
+            )
+
+            colorRow(
+                title: "Gas Color",
+                selection: $bbVehicle.gasColorName,
+                defaultName: "orange",
+                previewStyle: .quickAction(symbol: "fuelpump.fill")
             )
 
             colorRow(

@@ -99,7 +99,12 @@ class BBVehicle {
     /// Refresh button + map pin tint. Default: blue.
     var primaryColorName: String?
     /// Charging bolt + "Stop Charge" button color. Default: green.
+    /// Also used as the general EV indicator color on the sheet's
+    /// EV range row.
     var chargingColorName: String?
+    /// Gas tank indicator color on the sheet's gas range row.
+    /// Default: orange.
+    var gasColorName: String?
     /// Color shown when the vehicle is locked (status icon + tap-to-lock
     /// quick action). Default: red.
     var lockColorName: String?
@@ -493,8 +498,14 @@ extension BBVehicle {
     }
 
     /// Bolt icon when initiating charge / "Stop Charge" button.
+    /// Also used as the general EV indicator color on the sheet.
     var chargingColor: Color {
         CustomColor.color(forName: chargingColorName, default: "green")
+    }
+
+    /// Fuelpump icon + bar tint on the sheet's gas range row.
+    var gasColor: Color {
+        CustomColor.color(forName: gasColorName, default: "orange")
     }
 
     /// Color shown when the vehicle is locked.
@@ -538,7 +549,7 @@ extension BBVehicle: Encodable {
         case battery12V, doorOpen, trunkOpen, hoodOpen, tirePressureWarning
         case customName, isHidden, sortOrder, backgroundColorName, watchBackgroundColorName
         case chargePortTypeRaw, debugConfiguration, debugLiveActivity, enableSeatHeatControls
-        case primaryColorName, chargingColorName, lockColorName, unlockColorName, startClimateColorName
+        case primaryColorName, chargingColorName, gasColorName, lockColorName, unlockColorName, startClimateColorName
         case fuelTypeOverrideRaw
         case showClimateDurationOverride
         case climatePresets
@@ -586,6 +597,7 @@ extension BBVehicle: Encodable {
         // Per-vehicle accent colors
         try container.encodeIfPresent(primaryColorName, forKey: .primaryColorName)
         try container.encodeIfPresent(chargingColorName, forKey: .chargingColorName)
+        try container.encodeIfPresent(gasColorName, forKey: .gasColorName)
         try container.encodeIfPresent(lockColorName, forKey: .lockColorName)
         try container.encodeIfPresent(unlockColorName, forKey: .unlockColorName)
         try container.encodeIfPresent(startClimateColorName, forKey: .startClimateColorName)

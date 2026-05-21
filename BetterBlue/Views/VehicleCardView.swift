@@ -18,6 +18,11 @@ struct VehicleCardView: View {
     let onVehicleSelected: (BBVehicle) -> Void
     let onSuccessfulRefresh: (() -> Void)?
     var transition: Namespace.ID?
+    /// When true, the card lays out top-aligned and skips the
+    /// bottom-anchored `Spacer(minLength: 0)` it uses in the old
+    /// map-overlay world. Set by `VehicleSheetView` so the card
+    /// looks right inside a sheet's `ScrollView`.
+    var topAligned: Bool = false
     @Environment(\.modelContext) private var modelContext
     @Namespace private var fallbackTransition
     @State private var isRefreshing = false
@@ -76,7 +81,9 @@ struct VehicleCardView: View {
         // ClimateButton, ChargingButton, EVRangeDisplayCard).
             PersistentModelGuard(model: bbVehicle) {
                 VStack(spacing: 8) {
-                    Spacer(minLength: 0)
+                    if !topAligned {
+                        Spacer(minLength: 0)
+                    }
                     // Error message card (only show if there's an error)
                     if let errorMessage {
                         Button {
