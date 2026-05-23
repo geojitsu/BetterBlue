@@ -158,7 +158,7 @@ struct ClimateButton: View {
         if shouldStart {
             let climateOptions = options ??
                 effectivePreset?.climateOptions ??
-                ClimateOptions()
+                ClimateOptions(preferredUnits: appSettings.preferredTemperatureUnit)
             try await account.startClimate(
                 bbVehicle,
                 options: climateOptions,

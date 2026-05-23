@@ -1125,7 +1125,8 @@ struct PersistentVehicleSheet: View {
         let preset = selectedClimatePreset
         do {
             if start {
-                let climateOptions = options ?? preset?.climateOptions ?? ClimateOptions()
+                let climateOptions = options ?? preset?.climateOptions
+                    ?? ClimateOptions(preferredUnits: appSettings.preferredTemperatureUnit)
                 try await account.startClimate(
                     bbVehicle,
                     options: climateOptions,

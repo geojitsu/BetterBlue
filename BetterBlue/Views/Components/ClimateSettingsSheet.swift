@@ -91,7 +91,7 @@ extension ClimateSettingsSheet {
             let defaultPreset = ClimatePreset(
                 name: "Default",
                 iconName: "fan",
-                climateOptions: ClimateOptions(),
+                climateOptions: ClimateOptions(preferredUnits: AppSettings.shared.preferredTemperatureUnit),
                 isSelected: true,
                 vehicle: vehicle
             )
@@ -105,7 +105,7 @@ extension ClimateSettingsSheet {
         let newPreset = ClimatePreset(
             name: "Preset \(vehiclePresets.count + 1)",
             iconName: randomIcon,
-            climateOptions: ClimateOptions(),
+            climateOptions: ClimateOptions(preferredUnits: AppSettings.shared.preferredTemperatureUnit),
             isSelected: false,
             vehicle: vehicle
         )

@@ -310,7 +310,7 @@ extension ClimateSettingsContent {
             let defaultPreset = ClimatePreset(
                 name: "Default",
                 iconName: "fan",
-                climateOptions: ClimateOptions(),
+                climateOptions: ClimateOptions(preferredUnits: AppSettings.shared.preferredTemperatureUnit),
                 isSelected: true,
                 vehicle: vehicle
             )

@@ -599,7 +599,7 @@ extension BBAccount {
                 resolvedPresetName = resolvedPresetName ?? firstPreset.name
                 resolvedPresetIcon = resolvedPresetIcon ?? firstPreset.iconName
             } else {
-                climateOptions = ClimateOptions()
+                climateOptions = ClimateOptions(preferredUnits: AppSettings.shared.preferredTemperatureUnit)
             }
         }
 
