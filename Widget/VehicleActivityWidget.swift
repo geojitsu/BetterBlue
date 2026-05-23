@@ -220,7 +220,13 @@ struct DynamicIslandExpandedContentView: View {
                 }
             }
 
-            // Footer with refresh status and action buttons
+            // Footer with refresh status and action buttons.
+            // Vehicle name + "Updated …" both use caption2/secondary
+            // so the footer reads as a single understated metadata
+            // row instead of the name dominating the card. The lone
+            // Spacer between name and time pushes the time all the
+            // way to the trailing edge (or just inside the stop
+            // button when one is present).
             HStack {
                 if context.state.isRefreshing {
                     ProgressView()
@@ -228,15 +234,16 @@ struct DynamicIslandExpandedContentView: View {
                     Text("Refreshing...")
                         .font(.caption2)
                         .foregroundColor(.secondary)
+                    Spacer()
                 } else {
-                    Text("\(context.attributes.vehicleName)")
+                    Text(context.attributes.vehicleName)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                     Spacer()
                     Text("Updated \(context.state.status.lastUpdated, style: .time)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-
-                Spacer()
 
                 // Stop button (only for climate and debug, not charging)
                 if context.state.activityType != .charging {
@@ -247,6 +254,7 @@ struct DynamicIslandExpandedContentView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(context.state.isRefreshing)
+                    .padding(.leading, 8)
                 }
             }
         }
@@ -503,7 +511,10 @@ struct VehicleActivityContentView: View {
                 }
             }
 
-            // Footer with action buttons
+            // Footer with action buttons. Vehicle name leads, time
+            // pushed to the trailing edge — same treatment as the
+            // content-card footer above so the two layouts read
+            // consistently.
             HStack {
                 if context.state.isRefreshing {
                     ProgressView()
@@ -511,13 +522,16 @@ struct VehicleActivityContentView: View {
                     Text("Refreshing...")
                         .font(.caption2)
                         .foregroundColor(.secondary)
+                    Spacer()
                 } else {
-                    Text("\(context.attributes.vehicleName) • Updated \(context.state.status.lastUpdated, style: .time)")
+                    Text(context.attributes.vehicleName)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("Updated \(context.state.status.lastUpdated, style: .time)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-
-                Spacer()
 
                 // Stop button (only for climate and debug, not charging)
                 if context.state.activityType != .charging {
@@ -531,6 +545,7 @@ struct VehicleActivityContentView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(context.state.isRefreshing)
+                    .padding(.leading, 8)
                 }
             }
         }
