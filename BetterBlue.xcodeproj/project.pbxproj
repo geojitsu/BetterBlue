@@ -116,6 +116,7 @@
 				Utility/AppSettings.swift,
 				Utility/Backgrounds.swift,
 				Utility/CachedAPIClient.swift,
+				Utility/CloudKitSyncMonitor.swift,
 				Utility/CustomColors.swift,
 				Utility/Date.swift,
 				Utility/DiagnosticInfo.swift,
@@ -164,6 +165,7 @@
 				Utility/AppSettings.swift,
 				Utility/Backgrounds.swift,
 				Utility/CachedAPIClient.swift,
+				Utility/CloudKitSyncMonitor.swift,
 				Utility/CustomColors.swift,
 				Utility/Date.swift,
 				Utility/DiagnosticInfo.swift,
@@ -207,6 +209,7 @@
 				Utility/AppSettings.swift,
 				Utility/Backgrounds.swift,
 				Utility/CachedAPIClient.swift,
+				Utility/CloudKitSyncMonitor.swift,
 				Utility/CustomColors.swift,
 				Utility/Date.swift,
 				Utility/DiagnosticInfo.swift,
@@ -929,6 +932,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = WatchWidget/WatchWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = C2UW47HS8X;
@@ -962,6 +966,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = WatchWidget/WatchWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = C2UW47HS8X;

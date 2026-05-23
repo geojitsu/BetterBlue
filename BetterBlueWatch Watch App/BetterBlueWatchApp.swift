@@ -17,6 +17,13 @@ extension Notification.Name {
 @main
 struct BetterBlueWatchApp: App {
     var sharedModelContainer: ModelContainer = {
+        // Spin up the CloudKit sync monitor BEFORE creating the
+        // container so we catch the initial `setup` events that
+        // fire as SwiftData wires up its NSPersistentCloudKitContainer.
+        // The watch is where sync visibility matters most — it's
+        // the platform with the most reports of "Not Syncing."
+        Task { @MainActor in _ = CloudKitSyncMonitor.shared }
+
         do {
             let container = try createSharedModelContainer()
 

@@ -24,6 +24,13 @@ struct BetterBlueApp: App {
         // Configure BetterBlueKit to use OSLog via AppLogger
         BBLogger.sink = OSLogSink.shared
 
+        // Spin up the CloudKit sync monitor BEFORE creating the
+        // container so we catch the initial `setup` event(s) that
+        // fire as SwiftData wires up its NSPersistentCloudKitContainer.
+        // Without this, the Diagnostics view shows "Last setup:
+        // never" even on a healthy launch.
+        Task { @MainActor in _ = CloudKitSyncMonitor.shared }
+
         do {
             let container = try createSharedModelContainer()
 
