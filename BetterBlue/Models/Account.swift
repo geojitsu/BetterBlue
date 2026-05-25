@@ -358,7 +358,7 @@ extension BBAccount {
         }
 
         // For Kia vehicles, ensure vehicleKey is populated by refreshing if needed
-        if brandEnum == .kia && bbVehicle.vehicleKey == nil {
+        if brandEnum == .kia && regionEnum != .europe && bbVehicle.vehicleKey == nil {
             BBLogger.debug(.api, "BBAccount: Kia vehicle missing vehicleKey, fetching fresh data...")
             try await loadVehicles(modelContext: modelContext)
             return try await fetchVehicleStatus(for: bbVehicle, modelContext: modelContext, cached: cached)
@@ -523,7 +523,7 @@ extension BBAccount {
         }
 
         // For Kia vehicles, ensure vehicleKey is populated by refreshing if needed
-        if brandEnum == .kia && bbVehicle.vehicleKey == nil {
+        if brandEnum == .kia && regionEnum != .europe && bbVehicle.vehicleKey == nil {
             BBLogger.debug(.api, "BBAccount: Kia vehicle missing vehicleKey, fetching fresh data...")
             let fetchedVehicles = try await api.fetchVehicles(authToken: authToken)
 
