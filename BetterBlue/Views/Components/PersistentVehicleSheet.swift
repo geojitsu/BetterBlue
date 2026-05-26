@@ -341,23 +341,37 @@ struct PersistentVehicleSheet: View {
     @ViewBuilder
     private var contentStack: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Error display moved to a separate `errorCardView`
-            // rendered above the main card in `body`'s VStack.
-            headerRow
-            // Compact fuel rows for all vehicle types — gas first,
-            // then EV (PHEVs get both; pure EV and pure ICE get
-            // just the relevant one). EV row's bar upgrades to the
-            // thick EVChargingProgressView charging bar when plugged
-            // in + charging.
-            if let gas = safeGasRange {
-                gasRangeRow(gas)
+            // Controls section (header + ranges + lock + climate).
+            // Wrapped in its own VStack with a GeometryReader so
+            // we can report its height up to the pager — that
+            // height becomes the collapsed-detent height, sized
+            // exactly to show the controls without the
+            // below-the-fold detail rows.
+            VStack(alignment: .leading, spacing: 16) {
+                headerRow
+                // Compact fuel rows for all vehicle types — gas first,
+                // then EV (PHEVs get both; pure EV and pure ICE get
+                // just the relevant one). EV row's bar upgrades to the
+                // thick EVChargingProgressView charging bar when plugged
+                // in + charging.
+                if let gas = safeGasRange {
+                    gasRangeRow(gas)
+                }
+                if let ev = safeEvStatus {
+                    evRangeRow(ev)
+                    chargingSection(ev)
+                }
+                lockSection
+                climateSection
             }
-            if let ev = safeEvStatus {
-                evRangeRow(ev)
-                chargingSection(ev)
-            }
-            lockSection
-            climateSection
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: ControlsHeightPreferenceKey.self,
+                        value: proxy.size.height
+                    )
+                }
+            )
             Divider().padding(.top, 4)
             detailRows
         }
@@ -396,9 +410,18 @@ struct PersistentVehicleSheet: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        Text(bbVehicle.vin)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        // Server timestamp moved up here from the
+                        // below-the-fold detail rows — when "was it
+                        // updated recently?" is the question, having
+                        // the answer right under the title beats
+                        // making the user scroll. VIN moved to the
+                        // detail rows since it's reference info, not
+                        // glanceable.
+                        if let lastUpdated = bbVehicle.lastUpdated {
+                            Text(formatLastUpdated(lastUpdated))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
@@ -735,13 +758,6 @@ struct PersistentVehicleSheet: View {
     @ViewBuilder
     private var detailRows: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let lastUpdated = bbVehicle.lastUpdated {
-                DetailRow(
-                    icon: "arrow.clockwise",
-                    label: "Server Timestamp",
-                    value: formatLastUpdated(lastUpdated)
-                )
-            }
             if let syncDate = bbVehicle.syncDate {
                 DetailRow(
                     icon: "car",
@@ -749,6 +765,11 @@ struct PersistentVehicleSheet: View {
                     value: formatLastUpdated(syncDate)
                 )
             }
+            DetailRow(
+                icon: "number",
+                label: "VIN",
+                value: bbVehicle.vin
+            )
             DetailRow(
                 icon: "speedometer",
                 label: "Odometer",
@@ -1531,6 +1552,20 @@ private struct ContentHeightPreferenceKey: PreferenceKey {
     }
 }
 
+/// Measures the height of just the controls section (everything
+/// above the divider — header, ranges, lock, climate). The pager
+/// uses this per-vehicle value as the collapsed detent height, so
+/// the collapsed sheet shows exactly the controls with no padding
+/// of dead space. Different fuel types report different heights
+/// (an EV has the charging row, a PHEV has both EV + gas rows,
+/// etc.), so each vehicle gets its own measurement.
+private struct ControlsHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// PreferenceKey reporting the height contribution of the optional
 /// error card above the main card (its outer height + the VStack
 /// spacing). The pager adds the max across all cards to its
@@ -1576,7 +1611,31 @@ struct VehicleSheetPager: View {
     /// per-vehicle sheets.
     let sheetPresentation: VehicleSheetPresentation
 
-    @State private var detent: SheetDetent = .collapsed
+    /// Per-VIN detent state — each vehicle remembers whether the
+    /// user left its sheet collapsed or expanded. Swiping to a
+    /// different vehicle no longer resets the detent; come back
+    /// and it's where you left it.
+    @State private var detents: [String: SheetDetent] = [:]
+
+    private var currentVin: String? {
+        selectedVehicleIndex < bbVehicles.count
+            ? bbVehicles[selectedVehicleIndex].vin
+            : nil
+    }
+
+    private func detent(for vin: String) -> SheetDetent {
+        detents[vin] ?? .collapsed
+    }
+
+    /// Binding handed to each card so its drag handle tap and any
+    /// other detent writes land in the per-vehicle slot rather
+    /// than a single shared value.
+    private func detentBinding(for vin: String) -> Binding<SheetDetent> {
+        Binding(
+            get: { detents[vin] ?? .collapsed },
+            set: { detents[vin] = $0 }
+        )
+    }
     /// Live vertical drag offset from the pager's swipe gesture.
     /// Positive = finger dragged down (shrink), negative = up (grow).
     @State private var dragTranslation: CGFloat = 0
@@ -1606,8 +1665,27 @@ struct VehicleSheetPager: View {
     /// to `scrollViewHeight` so the error card fits above the main
     /// card without clipping.
     @State private var errorOverheads: [String: CGFloat] = [:]
+    /// Per-VIN controls-section height (header + ranges + lock +
+    /// climate, measured by `ControlsHeightPreferenceKey`). Used
+    /// as the collapsed-detent height for THAT specific vehicle —
+    /// per-fuel-type, so an ICE car (no charging row) collapses
+    /// to a shorter card than a PHEV (gas + EV + charging).
+    @State private var controlsHeights: [String: CGFloat] = [:]
 
-    private let collapsedHeight: CGFloat = 380
+    /// Floor for the collapsed detent — used until the per-vehicle
+    /// `controlsHeights` measurement arrives on first render so
+    /// the card doesn't briefly flash at 0 height.
+    private let collapsedHeightFloor: CGFloat = 200
+    /// `controlsHeight` is measured on the inner controls VStack
+    /// only — it does NOT include the contentStack's outer
+    /// `.padding(.top, 8)` + `.padding(.bottom, 22)`. We add those
+    /// 30pt back here so the collapsed card actually FITS the
+    /// controls (previously cut off the bottom row).
+    private let contentVerticalPadding: CGFloat = 8 + 22
+    /// Buffer added to the expanded detent so the bottom of the
+    /// detail rows sits a comfortable distance from the rounded
+    /// card edge instead of crowding it.
+    private let expandedBuffer: CGFloat = 24
     private let expandedTopInset: CGFloat = 80
     private let snapThreshold: CGFloat = 60
     /// Extra space the main card adds on top of `cardHeight` for
@@ -1620,18 +1698,20 @@ struct VehicleSheetPager: View {
 
     var body: some View {
         GeometryReader { geo in
-            let cardHeight = computeCardHeight(geo: geo)
-            // ScrollView frame = main card height + chrome + the
-            // stable error-card overhead. Stable overhead means
-            // the only thing changing during a drag is `cardHeight`
-            // itself — no cascading preference updates.
-            let scrollViewHeight = cardHeight + chromeOuterInset + maxErrorOverhead
-            // VStack with Spacer pushes the bounded ScrollView to the
-            // bottom. Spacer takes the empty area above without
-            // intercepting touches, so map taps reach the map.
+            // Each card now computes its OWN height (per VIN), so the
+            // user sees the new card at its correct height during the
+            // swipe rather than getting a snap when the swipe settles.
+            // The ScrollView frame itself uses the MAX height across
+            // all vehicles so the tallest can fit; shorter cards sit
+            // bottom-aligned within that frame (HStack alignment:
+            // .bottom). Map taps in the dead area above a short card
+            // are eaten by the ScrollView — acceptable trade-off
+            // versus the post-swipe height jump it replaces.
+            let maxCard = maxCardHeight(geo: geo)
+            let scrollViewHeight = maxCard + chromeOuterInset + maxErrorOverhead
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
-                pagerScrollView(cardHeight: cardHeight)
+                pagerScrollView(geo: geo)
                     .frame(height: scrollViewHeight)
                     // Vertical swipe-anywhere — attached as a
                     // `simultaneousGesture` on the pager's ScrollView.
@@ -1639,8 +1719,20 @@ struct VehicleSheetPager: View {
                     // it from firing on horizontal pans so the
                     // pager's paging snap stays clean.
                     .simultaneousGesture(verticalCardDragGesture)
-                    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: detent)
+                    // Animate when the current vehicle's detent flips
+                    // (the user pulled / tapped the handle / drag
+                    // gesture settled). Keyed on the dictionary so any
+                    // per-VIN change re-runs the animation.
+                    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: detents)
                     .animation(.spring(response: 0.4, dampingFraction: 0.85), value: maxNaturalHeight)
+                    // No animation when `selectedVehicleIndex`
+                    // changes — when the user swipes to a card with
+                    // a different fuel type, the card height should
+                    // just BE the right size on the new render, not
+                    // spring-animate into place after the swipe
+                    // settles (which reads as a distracting
+                    // post-swipe bounce).
+                    .animation(nil, value: selectedVehicleIndex)
                     // No `.animation(nil, value: dragTranslation)` —
                     // the live-drag updates already use a
                     // disablesAnimations transaction in `onChanged`,
@@ -1667,7 +1759,19 @@ struct VehicleSheetPager: View {
         errorOverheads.values.max() ?? 0
     }
 
-    private func computeCardHeight(geo: GeometryProxy) -> CGFloat {
+    /// Maximum card height across all vehicles for the current geo
+    /// + detent + drag state. Drives the ScrollView frame so the
+    /// tallest card fits.
+    private func maxCardHeight(geo: GeometryProxy) -> CGFloat {
+        let perCard = bbVehicles.map { cardHeight(for: $0.vin, geo: geo) }
+        return perCard.max() ?? 0
+    }
+
+    /// Per-vehicle card height — driven by THAT vehicle's own
+    /// controls/natural measurements so each card slides into view
+    /// at the correct height during a swipe, not at whatever the
+    /// previous card was.
+    private func cardHeight(for vin: String, geo: GeometryProxy) -> CGFloat {
         // `geo.size.height` can be 0 (or briefly tiny) on first
         // GeometryReader pass before layout completes. Without the
         // `max(0, ...)` clamp, `screenMax` goes negative, which
@@ -1676,15 +1780,37 @@ struct VehicleSheetPager: View {
         // "Invalid frame dimension (negative or non-finite)"
         // runtime warnings.
         let screenMax = max(0, geo.size.height - expandedTopInset)
-        let natural = maxNaturalHeight
-        let expanded: CGFloat = natural > 0 ? min(natural, screenMax) : screenMax
-        let base = detent == .collapsed ? min(collapsedHeight, expanded) : expanded
+
+        let perVehicleControls = controlsHeights[vin] ?? 0
+        let perVehicleNatural = naturalHeights[vin] ?? 0
+        // Collapsed = controls VStack + the contentStack's outer
+        // vertical padding (which the measurement doesn't include).
+        // Floor protects against the first render before measurement.
+        let collapsed = max(
+            collapsedHeightFloor,
+            perVehicleControls > 0 ? perVehicleControls + contentVerticalPadding : 0
+        )
+        // Expanded = full content (already includes its own padding,
+        // since ContentHeightPreferenceKey measures the outer padded
+        // chain) + a small breathing buffer.
+        let naturalWithBuffer = perVehicleNatural > 0
+            ? perVehicleNatural + expandedBuffer
+            : 0
+
+        let expanded: CGFloat = naturalWithBuffer > 0
+            ? min(naturalWithBuffer, screenMax)
+            : screenMax
+        // Each card respects ITS OWN detent — swiping between
+        // vehicles preserves whatever expanded/collapsed state the
+        // user left them in.
+        let cardDetent = detent(for: vin)
+        let base = cardDetent == .collapsed ? min(collapsed, expanded) : expanded
         // dragTranslation < 0 grows the card, > 0 shrinks it.
         let unclamped = base - dragTranslation
 
         // Bounds for the natural drag range — beyond these we
         // apply rubber-band damping so the card resists the pull.
-        let minBound = min(collapsedHeight, expanded)
+        let minBound = min(collapsed, expanded)
         let maxBound = expanded
 
         let resolved: CGFloat
@@ -1766,14 +1892,16 @@ struct VehicleSheetPager: View {
                 }
             }
             .onEnded { value in
-                if dragActivationOffset != nil {
+                if dragActivationOffset != nil, let vin = currentVin {
                     let predicted = value.predictedEndTranslation.height
                         - (dragActivationOffset ?? 0)
-                    switch detent {
+                    // Drag affects ONLY the currently-visible card's
+                    // detent. Other vehicles' state stays untouched.
+                    switch detent(for: vin) {
                     case .collapsed:
-                        if predicted < -snapThreshold { detent = .expanded }
+                        if predicted < -snapThreshold { detents[vin] = .expanded }
                     case .expanded:
-                        if predicted > snapThreshold { detent = .collapsed }
+                        if predicted > snapThreshold { detents[vin] = .collapsed }
                     }
                 }
                 // Spring back from any rubber-band overdrag to the
@@ -1796,7 +1924,7 @@ struct VehicleSheetPager: View {
     }
 
     @ViewBuilder
-    private func pagerScrollView(cardHeight: CGFloat) -> some View {
+    private func pagerScrollView(geo: GeometryProxy) -> some View {
         // ScrollViewReader (+ `.onScrollPhaseChange` for sync)
         // instead of `.scrollPosition(id:)`. The latter's
         // bidirectional binding was interacting badly with our
@@ -1822,8 +1950,8 @@ struct VehicleSheetPager: View {
                             bbVehicle: vehicle,
                             bbVehicles: bbVehicles,
                             selectedIndex: selectedVehicleIndex,
-                            detent: $detent,
-                            cardHeight: cardHeight,
+                            detent: detentBinding(for: vehicle.vin),
+                            cardHeight: cardHeight(for: vehicle.vin, geo: geo),
                             onSuccessfulRefresh: onSuccessfulRefresh,
                             mfaState: mfaState,
                             sheetPresentation: sheetPresentation
@@ -1841,6 +1969,13 @@ struct VehicleSheetPager: View {
                             let vin = vehicle.vin
                             if abs((errorOverheads[vin] ?? 0) - rounded) > 0.5 {
                                 errorOverheads[vin] = rounded
+                            }
+                        }
+                        .onPreferenceChange(ControlsHeightPreferenceKey.self) { value in
+                            let rounded = (value * 2).rounded() / 2
+                            let vin = vehicle.vin
+                            if abs((controlsHeights[vin] ?? 0) - rounded) > 0.5 {
+                                controlsHeights[vin] = rounded
                             }
                         }
                         .id(index)
@@ -1869,6 +2004,9 @@ struct VehicleSheetPager: View {
                 if clamped != selectedVehicleIndex {
                     BBLogger.info(.app, "[SVI] pager onScrollPhaseChange setting \(selectedVehicleIndex) → \(clamped)")
                     selectedVehicleIndex = clamped
+                    // Detent is per-VIN now (see `detents`) — no
+                    // reset on swipe. Each vehicle keeps whatever
+                    // expanded/collapsed state the user last gave it.
                 }
             }
             .onChange(of: selectedVehicleIndex) { _, new in
