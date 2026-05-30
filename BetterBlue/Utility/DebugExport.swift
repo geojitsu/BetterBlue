@@ -96,11 +96,20 @@ struct DebugExportData {
         do {
             allLogs = try modelContext.fetch(descriptor)
         } catch {
-            return AccountHTTPLogs(login: nil, getVehicles: nil, vehicleStatuses: [])
+            return AccountHTTPLogs(login: nil, getVehicles: nil, mfaLogs: [], vehicleStatuses: [])
         }
 
         let loginLog = allLogs.first { $0.log.requestType == .login }?.log
         let getVehiclesLog = allLogs.first { $0.log.requestType == .fetchVehicles }?.log
+
+        // Capture the most recent MFA/OTP exchange (selverifmeth, sendotp,
+        // validateotp, genmfatkn). A full flow is up to 4 calls; grab the
+        // latest 6 to cover one flow plus a retry. The OTP code (`otpNo`)
+        // is redacted by SensitiveDataRedactor before sharing.
+        let mfaLogs = allLogs
+            .filter { $0.log.requestType == .sendMFA || $0.log.requestType == .verifyMFA }
+            .prefix(6)
+            .map(\.log)
 
         var vehicleStatuses: [HTTPLog] = []
         for vehicle in vehicles {
@@ -121,7 +130,12 @@ struct DebugExportData {
             }
         }
 
-        return AccountHTTPLogs(login: loginLog, getVehicles: getVehiclesLog, vehicleStatuses: vehicleStatuses)
+        return AccountHTTPLogs(
+            login: loginLog,
+            getVehicles: getVehiclesLog,
+            mfaLogs: Array(mfaLogs),
+            vehicleStatuses: vehicleStatuses
+        )
     }
 }
 
@@ -130,16 +144,18 @@ struct DebugExportData {
 struct AccountHTTPLogs: Encodable {
     let login: HTTPLog?
     let getVehicles: HTTPLog?
+    let mfaLogs: [HTTPLog]
     let vehicleStatuses: [HTTPLog]
 
     enum CodingKeys: String, CodingKey {
-        case login, getVehicles, vehicleStatuses
+        case login, getVehicles, mfaLogs, vehicleStatuses
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(login.map { HTTPLogExport(log: $0) }, forKey: .login)
         try container.encodeIfPresent(getVehicles.map { HTTPLogExport(log: $0) }, forKey: .getVehicles)
+        try container.encode(mfaLogs.map { HTTPLogExport(log: $0) }, forKey: .mfaLogs)
         try container.encode(vehicleStatuses.map { HTTPLogExport(log: $0) }, forKey: .vehicleStatuses)
     }
 }
