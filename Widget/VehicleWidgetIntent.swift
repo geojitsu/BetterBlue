@@ -55,6 +55,7 @@ struct VehicleEntity: AppEntity {
     var lockColorName: String?
     var unlockColorName: String?
     var startClimateColorName: String?
+    var stopColorName: String?
     var timestamp: Date
     var presets: [ClimatePresetEntity] = []
 
@@ -164,6 +165,7 @@ struct VehicleEntity: AppEntity {
     var lockColor: Color { CustomColor.color(forName: lockColorName, default: "red") }
     var unlockColor: Color { CustomColor.color(forName: unlockColorName, default: "green") }
     var startClimateColor: Color { CustomColor.color(forName: startClimateColorName, default: "blue") }
+    var stopColor: Color { CustomColor.color(forName: stopColorName, default: "red") }
 
     var selectedPreset: ClimatePresetEntity? {
         presets.first(where: \.isSelected)
@@ -211,6 +213,7 @@ struct VehicleEntity: AppEntity {
         lockColorName: String? = nil,
         unlockColorName: String? = nil,
         startClimateColorName: String? = nil,
+        stopColorName: String? = nil,
         presets: [ClimatePresetEntity] = []
     ) {
         // Non-wrapped properties first — `@Property` setters (used
@@ -227,6 +230,7 @@ struct VehicleEntity: AppEntity {
         self.lockColorName = lockColorName
         self.unlockColorName = unlockColorName
         self.startClimateColorName = startClimateColorName
+        self.stopColorName = stopColorName
         self.presets = presets
 
         // Wrapped properties — safe to set now that self is initialized.
@@ -250,6 +254,7 @@ struct VehicleEntity: AppEntity {
         lockColorName = bbVehicle.lockColorName
         unlockColorName = bbVehicle.unlockColorName
         startClimateColorName = bbVehicle.startClimateColorName
+        stopColorName = bbVehicle.stopColorName
         timestamp = bbVehicle.lastUpdated ?? Date()
 
         // Compute per-fuel-type range/percentage separately so PHEVs
