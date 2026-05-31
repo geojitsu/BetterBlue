@@ -256,10 +256,12 @@ struct AccountInfoView: View {
         .onAppear {
             fakeVehicles = account.safeVehicles
             // Match the UI mode to the account's current auth state.
-            // An EU account that already has a refresh token starts
-            // in refresh-token mode; everyone else starts in password
-            // mode (and stays there — the header button is hidden).
-            useToken = !account.refreshToken.isEmpty
+            // A genuine refresh-token account has NO password — only
+            // then do we start in refresh-token mode. Password accounts
+            // also cache a server-issued refresh token after login, so
+            // keying off `refreshToken` alone wrongly flipped every
+            // password account into "Change Refresh Token" mode.
+            useToken = account.password.isEmpty && !account.refreshToken.isEmpty
         }
     }
 
