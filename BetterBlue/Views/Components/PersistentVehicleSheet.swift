@@ -119,6 +119,24 @@ struct PersistentVehicleSheet: View {
     private let refreshButtonInset: CGFloat = 16
 
     var body: some View {
+        // Guard against a tombstoned model. When the owning account is
+        // deleted, SwiftData cascade-deletes its vehicles — but this
+        // card can still re-evaluate its body once during the same
+        // change transaction, before the pager's ForEach diffs the
+        // deleted vehicle out. Reading any persisted property then
+        // (e.g. `lockSection` → `bbVehicle.status`) traps in
+        // SwiftData's backing store (_InitialBackingData.getValue).
+        // `isDeleted` is safe to read on a deleted model; bail to an
+        // empty card until the view tree catches up.
+        if bbVehicle.isDeleted || bbVehicle.modelContext == nil {
+            EmptyView()
+        } else {
+            cardContent
+        }
+    }
+
+    @ViewBuilder
+    private var cardContent: some View {
         // Page: optional error card above + main card. Both share
         // the same glass-with-ZStack-mask treatment so they look
         // like sibling cards. Error overhead is measured on the
