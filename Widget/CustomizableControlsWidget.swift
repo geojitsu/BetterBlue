@@ -378,16 +378,19 @@ private struct ControlsWidgetBackground: View {
 
 struct ControlsWidgetView: View {
     let entry: ControlsWidgetEntry
+    @Environment(\.widgetFamily) private var family
+
+    private var isSmall: Bool { family == .systemSmall }
 
     var body: some View {
         if let vehicle = entry.vehicle {
-            VStack(spacing: 10) {
-                ControlsHeaderView(vehicle: vehicle)
+            VStack(alignment: .leading, spacing: isSmall ? 6 : 10) {
+                ControlsHeaderView(vehicle: vehicle, isSmall: isSmall)
                 ControlsButtonRow(vehicle: vehicle, actions: entry.actions)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, isSmall ? 12 : 16)
+            .padding(.vertical, isSmall ? 12 : 14)
         } else {
             VStack(spacing: 4) {
                 Image(systemName: "car.fill")
@@ -403,6 +406,7 @@ struct ControlsWidgetView: View {
 
 private struct ControlsHeaderView: View {
     let vehicle: VehicleEntity
+    let isSmall: Bool
 
     private var textColor: Color {
         ControlsColorUtil.contrastingText(for: vehicle.backgroundGradient.first)
@@ -416,7 +420,59 @@ private struct ControlsHeaderView: View {
         return "Charging"
     }
 
+    private var rangeText: String {
+        var text = vehicle.rangeText
+        if let percentage = vehicle.batteryPercentage {
+            text += " · \(Int(percentage))%"
+        }
+        return text
+    }
+
     var body: some View {
+        if isSmall {
+            smallHeader
+        } else {
+            mediumHeader
+        }
+    }
+
+    // 2×2: one datum per row, compact title — nothing competes for
+    // horizontal space so nothing truncates.
+    private var smallHeader: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(vehicle.displayName)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(textColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(updatedText)
+                .font(.caption2)
+                .foregroundColor(textColor.opacity(0.7))
+
+            HStack(spacing: 4) {
+                Image(systemName: vehicle.fuelType.hasElectricCapability ? "bolt.fill" : "fuelpump.fill")
+                    .font(.caption2)
+                    .foregroundColor(vehicle.fuelType.hasElectricCapability ? vehicle.chargingColor : .orange)
+                Text(rangeText)
+                    .font(.caption)
+                    .foregroundColor(textColor)
+                    .lineLimit(1)
+            }
+
+            if let chargingText {
+                Text(chargingText)
+                    .font(.caption2)
+                    .foregroundColor(vehicle.chargingColor)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // 4×2: title + updated on one row, range/charging on the next.
+    private var mediumHeader: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
                 Text(vehicle.displayName)
@@ -435,15 +491,10 @@ private struct ControlsHeaderView: View {
                 Image(systemName: vehicle.fuelType.hasElectricCapability ? "bolt.fill" : "fuelpump.fill")
                     .font(.caption2)
                     .foregroundColor(vehicle.fuelType.hasElectricCapability ? vehicle.chargingColor : .orange)
-                Text(vehicle.rangeText)
+                Text(rangeText)
                     .font(.caption)
                     .foregroundColor(textColor)
                     .lineLimit(1)
-                if let percentage = vehicle.batteryPercentage {
-                    Text("· \(Int(percentage))%")
-                        .font(.caption)
-                        .foregroundColor(textColor.opacity(0.85))
-                }
                 if let chargingText {
                     Spacer(minLength: 4)
                     HStack(spacing: 2) {
@@ -471,19 +522,32 @@ private struct ControlsButtonRow: View {
     let vehicle: VehicleEntity
     let actions: [WidgetActionEntity]
 
+    private let spacing: CGFloat = 10
+
     var body: some View {
-        HStack(spacing: 10) {
-            ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
-                ControlsCircleButton(vehicle: vehicle, action: action)
+        GeometryReader { geo in
+            let count = max(actions.count, 1)
+            let slotWidth = (geo.size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
+            // Largest square that fits both the per-slot width and the
+            // row's height — so the buttons grow to fill the space left
+            // under the header rather than sitting tiny in a gap.
+            let diameter = max(36, min(slotWidth, geo.size.height))
+            HStack(spacing: spacing) {
+                ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                    ControlsCircleButton(vehicle: vehicle, action: action, diameter: diameter)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
 private struct ControlsCircleButton: View {
     let vehicle: VehicleEntity
     let action: WidgetActionEntity
+    let diameter: CGFloat
+
+    private var iconSize: CGFloat { diameter * 0.42 }
 
     var body: some View {
         if action.kind == .none {
@@ -491,20 +555,18 @@ private struct ControlsCircleButton: View {
                 .fill(Color.white.opacity(0.12))
                 .overlay(
                     Image(systemName: action.iconName)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: iconSize, weight: .semibold))
                         .foregroundColor(.white.opacity(0.4))
                 )
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fit)
+                .frame(width: diameter, height: diameter)
         } else if let intent = makeIntent() {
             Button(intent: intent) {
                 Image(systemName: action.iconName)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: iconSize, weight: .semibold))
                     .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(1, contentMode: .fit)
+                    .frame(width: diameter, height: diameter)
                     .background(
-                        Circle().fill(action.kind.color(for: vehicle).opacity(0.85))
+                        Circle().fill(action.kind.color(for: vehicle).opacity(0.9))
                     )
                     .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
             }
