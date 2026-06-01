@@ -573,17 +573,20 @@ private struct ControlsCircleButton: View {
         }
     }
 
-    /// Matches the in-app quick-action buttons (`CircularIconLabel`):
-    /// a faint tinted circle with the icon drawn in the solid tint.
+    /// A solid tinted circle with a white glyph. The in-app quick-action
+    /// style (faint tint circle + colored icon) only reads on a neutral
+    /// sheet; the widget sits on the vehicle's color gradient, so it
+    /// needs an opaque fill to stay legible on any background.
     private var buttonLabel: some View {
         let tint = action.kind.color(for: vehicle)
         return ZStack {
-            Circle().fill(tint.opacity(0.18))
+            Circle().fill(tint)
             Image(systemName: displayIcon)
                 .font(.system(size: iconSize, weight: .semibold))
-                .foregroundStyle(tint)
+                .foregroundStyle(.white)
         }
         .frame(width: diameter, height: diameter)
+        .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
     }
 
     /// Maps the configured action onto its concrete control intent,

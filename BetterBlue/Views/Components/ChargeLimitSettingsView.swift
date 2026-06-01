@@ -64,7 +64,7 @@ struct ChargeLimitSettingsContent: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Image(systemName: "ev.plug.ac.type.1")
+                        Image(systemName: vehicle.chargePortType.acPlugIcon)
                             .foregroundColor(.blue)
                         Text("AC Charging Limit")
                             .font(.headline)
@@ -89,7 +89,7 @@ struct ChargeLimitSettingsContent: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Image(systemName: "ev.plug.dc.ccs1")
+                        Image(systemName: vehicle.chargePortType.dcPlugIcon)
                             .foregroundColor(.green)
                         Text("DC Charging Limit")
                             .font(.headline)
