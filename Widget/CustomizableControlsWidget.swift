@@ -528,13 +528,18 @@ private struct ControlsButtonRow: View {
         GeometryReader { geo in
             let count = max(actions.count, 1)
             let slotWidth = (geo.size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
-            // Largest square that fits both the per-slot width and the
-            // row's height — so the buttons grow to fill the space left
-            // under the header rather than sitting tiny in a gap.
-            let diameter = max(36, min(slotWidth, geo.size.height))
+            // Largest square that fits the per-slot width and the row's
+            // height, capped so the buttons read as quick actions (like
+            // the in-app sheet's 40pt circles) rather than dominating
+            // the card.
+            let diameter = max(36, min(slotWidth, geo.size.height, 52))
             HStack(spacing: spacing) {
                 ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                    // Each button centers inside an equal-width slot so
+                    // the (size-capped) circles stay evenly distributed
+                    // across the row instead of clustering in the middle.
                     ControlsCircleButton(vehicle: vehicle, action: action, diameter: diameter)
+                        .frame(maxWidth: .infinity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -573,20 +578,23 @@ private struct ControlsCircleButton: View {
         }
     }
 
-    /// A solid tinted circle with a white glyph. The in-app quick-action
-    /// style (faint tint circle + colored icon) only reads on a neutral
-    /// sheet; the widget sits on the vehicle's color gradient, so it
-    /// needs an opaque fill to stay legible on any background.
+    /// Mirrors the in-app quick-action look (`CircularIconLabel`): a
+    /// translucent tinted circle with the glyph drawn in the solid tint.
+    /// The app's sheet sits on dark glass, so its plain
+    /// `tint.opacity(0.18)` fill reads fine there; the widget sits on
+    /// the vehicle's color gradient, so the tint is layered over a dark
+    /// base to recreate that dark-glass backing and keep the colored
+    /// glyph legible on bright backgrounds.
     private var buttonLabel: some View {
         let tint = action.kind.color(for: vehicle)
         return ZStack {
-            Circle().fill(tint)
+            Circle().fill(Color.black.opacity(0.35))
+            Circle().fill(tint.opacity(0.22))
             Image(systemName: displayIcon)
                 .font(.system(size: iconSize, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(tint)
         }
         .frame(width: diameter, height: diameter)
-        .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
     }
 
     /// Maps the configured action onto its concrete control intent,
