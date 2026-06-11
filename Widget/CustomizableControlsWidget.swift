@@ -382,13 +382,21 @@ struct ControlsWidgetView: View {
 
     private var isSmall: Bool { family == .systemSmall }
 
+    /// Configured actions minus empty slots — a `None` slot shouldn't
+    /// reserve space; the remaining buttons re-center in the row.
+    private var visibleActions: [WidgetActionEntity] {
+        entry.actions.filter { $0.kind != .none }
+    }
+
     var body: some View {
         if let vehicle = entry.vehicle {
-            VStack(alignment: .leading, spacing: isSmall ? 6 : 10) {
-                ControlsHeaderView(vehicle: vehicle, isSmall: isSmall)
-                ControlsButtonRow(vehicle: vehicle, actions: entry.actions)
+            Group {
+                if isSmall {
+                    smallLayout(vehicle: vehicle)
+                } else {
+                    mediumLayout(vehicle: vehicle)
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.horizontal, isSmall ? 12 : 16)
             .padding(.vertical, isSmall ? 12 : 14)
         } else {
@@ -401,6 +409,88 @@ struct ControlsWidgetView: View {
                     .foregroundColor(.secondary)
             }
         }
+    }
+
+    private func smallLayout(vehicle: VehicleEntity) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ControlsHeaderView(vehicle: vehicle, isSmall: true)
+            ControlsButtonRow(vehicle: vehicle, actions: visibleActions)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 4×2: title + timestamp stacked at top-left with the buttons
+    /// centered in the space below; the range wheel (and charging
+    /// details) occupy the right column.
+    private func mediumLayout(vehicle: VehicleEntity) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                ControlsHeaderView(vehicle: vehicle, isSmall: false)
+                ControlsButtonRow(vehicle: vehicle, actions: visibleActions)
+            }
+            ControlsRangeColumn(vehicle: vehicle)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// Percentage ring with the powertrain icon in the middle, plus the
+/// charging details (speed · time remaining) or range text beneath it.
+private struct ControlsRangeColumn: View {
+    let vehicle: VehicleEntity
+
+    private var textColor: Color {
+        ControlsColorUtil.contrastingText(for: vehicle.backgroundGradient.first)
+    }
+
+    private var tint: Color {
+        vehicle.fuelType.hasElectricCapability ? vehicle.chargingColor : .orange
+    }
+
+    private var fillFraction: Double {
+        (vehicle.batteryPercentage ?? 0) / 100.0
+    }
+
+    /// "45.0 kW · 1h 5m" while charging; the plain range otherwise.
+    private var detailText: String? {
+        if vehicle.isCharging == true {
+            var parts: [String] = []
+            if let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
+                parts.append(String(format: "%.1f kW", kw))
+            }
+            if let minutes = vehicle.chargeTimeRemainingMinutes, minutes > 0 {
+                parts.append(minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m")
+            }
+            return parts.isEmpty ? "Charging" : parts.joined(separator: " · ")
+        }
+        return vehicle.rangeText.isEmpty ? nil : vehicle.rangeText
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .stroke(textColor.opacity(0.25), lineWidth: 5)
+                Circle()
+                    .trim(from: 0, to: fillFraction)
+                    .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: vehicle.fuelType.hasElectricCapability ? "bolt.fill" : "fuelpump.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 56, height: 56)
+            .padding(.top, 2)
+
+            if let detailText {
+                Text(detailText)
+                    .font(.caption2)
+                    .foregroundColor(vehicle.isCharging == true ? vehicle.chargingColor : textColor.opacity(0.85))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .center)
     }
 }
 
@@ -471,42 +561,19 @@ private struct ControlsHeaderView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // 4×2: title + updated on one row, range/charging on the next.
+    // 4×2: title with the timestamp directly beneath it. Range and
+    // charging info live in the wheel column (`ControlsRangeColumn`).
     private var mediumHeader: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(vehicle.displayName)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(textColor)
-                    .lineLimit(1)
-                Spacer()
-                Text(updatedText)
-                    .font(.caption2)
-                    .foregroundColor(textColor.opacity(0.7))
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: 6) {
-                Image(systemName: vehicle.fuelType.hasElectricCapability ? "bolt.fill" : "fuelpump.fill")
-                    .font(.caption2)
-                    .foregroundColor(vehicle.fuelType.hasElectricCapability ? vehicle.chargingColor : .orange)
-                Text(rangeText)
-                    .font(.caption)
-                    .foregroundColor(textColor)
-                    .lineLimit(1)
-                if let chargingText {
-                    Spacer(minLength: 4)
-                    HStack(spacing: 2) {
-                        Image(systemName: "bolt.fill")
-                            .font(.caption2)
-                        Text(chargingText)
-                            .font(.caption2)
-                            .lineLimit(1)
-                    }
-                    .foregroundColor(vehicle.chargingColor)
-                }
-            }
+        VStack(alignment: .leading, spacing: 1) {
+            Text(vehicle.displayName)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(textColor)
+                .lineLimit(1)
+            Text(updatedText)
+                .font(.caption2)
+                .foregroundColor(textColor.opacity(0.7))
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -542,7 +609,7 @@ private struct ControlsButtonRow: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
     }
 }
@@ -565,12 +632,9 @@ private struct ControlsCircleButton: View {
     }
 
     var body: some View {
-        if action.kind == .none {
-            // Empty slot: render nothing, but reserve the space so the
-            // remaining buttons keep their positions.
-            Color.clear
-                .frame(width: diameter, height: diameter)
-        } else if let intent = makeIntent() {
+        // `None` slots are filtered out upstream (`visibleActions`), so
+        // every action that reaches here has a concrete intent.
+        if let intent = makeIntent() {
             Button(intent: intent) {
                 buttonLabel
             }
