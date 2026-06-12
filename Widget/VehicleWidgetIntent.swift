@@ -175,7 +175,10 @@ struct WidgetBackgroundEntity: AppEntity, Identifiable, Sendable {
     }
 
     static var vehicleSetting: WidgetBackgroundEntity {
-        WidgetBackgroundEntity(id: "vehicle-setting", displayName: "Default")
+        // Not "Default" — the background catalog itself has an option
+        // named Default (a real gradient), and the picker showed the
+        // two side by side as indistinguishable twins.
+        WidgetBackgroundEntity(id: "vehicle-setting", displayName: "Vehicle Setting")
     }
 
     static var all: [WidgetBackgroundEntity] {
