@@ -15,14 +15,19 @@ struct VehicleWidgetEntryView: View {
 
     var body: some View {
         if let vehicle = entry.vehicle {
-            VehicleControlsWidget(vehicle: vehicle, actions: entry.configuration.slotActions)
-                .containerBackground(for: .widget) {
-                    LinearGradient(
-                        gradient: Gradient(colors: vehicle.backgroundGradient),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                }
+            let gradient = entry.configuration.effectiveGradient(for: vehicle)
+            VehicleControlsWidget(
+                vehicle: vehicle,
+                buttons: entry.configuration.slotButtons,
+                gradient: gradient
+            )
+            .containerBackground(for: .widget) {
+                LinearGradient(
+                    gradient: Gradient(colors: gradient),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
         } else {
             VStack {
                 Image(systemName: "car.fill")
@@ -43,27 +48,19 @@ struct VehicleWidgetEntryView: View {
 
 struct VehicleControlsWidget: View {
     let vehicle: VehicleEntity
-    let actions: [WidgetActionEntity]
+    let buttons: [ConfiguredWidgetButton]
+    let gradient: [Color]
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
         Link(destination: URL(string: "betterblue://vehicle/\(vehicle.vin)")!) {
-            switch family {
-            case .systemSmall:
-                VehicleSmallWidget(vehicle: vehicle, actions: actions)
-            default:
-                VehicleMediumWidget(vehicle: vehicle, actions: actions)
-            }
+            UnifiedVehicleWidget(
+                vehicle: vehicle,
+                buttons: buttons,
+                gradient: gradient,
+                isSmall: family == .systemSmall
+            )
         }
-    }
-}
-
-struct VehicleMediumWidget: View {
-    let vehicle: VehicleEntity
-    let actions: [WidgetActionEntity]
-
-    var body: some View {
-        UnifiedVehicleWidget(vehicle: vehicle, actions: actions, isSmall: false)
     }
 }
 
@@ -83,28 +80,20 @@ struct WidgetButtonStyle: ButtonStyle {
     }
 }
 
-struct VehicleSmallWidget: View {
-    let vehicle: VehicleEntity
-    let actions: [WidgetActionEntity]
-
-    var body: some View {
-        UnifiedVehicleWidget(vehicle: vehicle, actions: actions, isSmall: true)
-    }
-}
-
 // Unified widget components
 struct UnifiedVehicleWidget: View {
     let vehicle: VehicleEntity
-    let actions: [WidgetActionEntity]
+    let buttons: [ConfiguredWidgetButton]
+    let gradient: [Color]
     let isSmall: Bool
 
     var body: some View {
         VStack(spacing: isSmall ? 0 : 8) {
             // Vehicle header
-            VehicleHeaderView(vehicle: vehicle, isSmall: isSmall)
+            VehicleHeaderView(vehicle: vehicle, gradient: gradient, isSmall: isSmall)
 
             // Action buttons
-            VehicleButtonsView(vehicle: vehicle, actions: actions, isSmall: isSmall)
+            VehicleButtonsView(vehicle: vehicle, buttons: buttons, isSmall: isSmall)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 16)
@@ -114,13 +103,11 @@ struct UnifiedVehicleWidget: View {
 
 struct VehicleHeaderView: View {
     let vehicle: VehicleEntity
+    let gradient: [Color]
     let isSmall: Bool
 
     private var textColor: Color {
-        let backgroundColors = vehicle.backgroundGradient
-        guard !backgroundColors.isEmpty else { return .primary }
-
-        let primaryColor = backgroundColors[0]
+        guard let primaryColor = gradient.first else { return .primary }
         return isLightColor(primaryColor) ? .black : .white
     }
 
@@ -139,7 +126,7 @@ struct VehicleHeaderView: View {
     }
 
     var body: some View {
-        HStack {
+        HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(vehicle.displayName)
                     .font(isSmall ? .caption : .headline)
@@ -155,38 +142,7 @@ struct VehicleHeaderView: View {
 
             Spacer()
 
-            if isSmall {
-                if vehicle.displayName.count <= 9 {
-                    // Small widget: only show range if name is 8 characters or less
-                    Text(vehicle.rangeText)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(textColor)
-                        .lineLimit(1)
-                }
-            } else {
-                // Medium widget: icon, range, dot, percentage
-                HStack(spacing: 4) {
-                    Image(systemName: vehicle.fuelType.hasElectricCapability ? "bolt.fill" : "fuelpump.fill")
-                        .foregroundColor(vehicle.fuelType.hasElectricCapability ? vehicle.chargingColor : .orange)
-                        .font(.caption)
-
-                    Text(vehicle.rangeText)
-                        .font(.caption)
-                        .foregroundColor(textColor)
-                        .lineLimit(1)
-
-                    Text("•")
-                        .font(.caption)
-                        .foregroundColor(textColor.opacity(0.7))
-
-                    if let percentage = vehicle.batteryPercentage {
-                        Text("\(Int(percentage))%")
-                            .font(.caption)
-                            .foregroundColor(textColor)
-                    }
-                }
-            }
+            VehicleRangeInfoView(vehicle: vehicle, textColor: textColor, isSmall: isSmall)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, isSmall ? 4 : 6)
@@ -198,6 +154,99 @@ struct VehicleHeaderView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: vehicle.timestamp, relativeTo: Date())
+    }
+}
+
+/// Right side of the widget header. One line per fuel axis — gas
+/// vehicles get the gas line, EVs the EV line, PHEVs both (gas first,
+/// EV beneath) — plus a charging line (speed · time remaining) while
+/// the vehicle is charging.
+struct VehicleRangeInfoView: View {
+    let vehicle: VehicleEntity
+    let textColor: Color
+    let isSmall: Bool
+
+    private struct Line: Identifiable {
+        let id: Int
+        let icon: String
+        let iconColor: Color
+        let text: String
+        let textColor: Color
+    }
+
+    private var lines: [Line] {
+        var result: [Line] = []
+
+        // Gas line (gas + PHEV): icon, range, percentage — same format
+        // the widget always used.
+        if let gasRange = vehicle.gasRange {
+            var text = gasRange
+            if let percent = vehicle.gasFuelPercentage {
+                text += " · \(Int(percent))%"
+            }
+            result.append(Line(
+                id: 0, icon: "fuelpump.fill", iconColor: .orange,
+                text: text, textColor: textColor
+            ))
+        }
+
+        // EV line: the only line for pure EVs, the second line for PHEVs.
+        if vehicle.fuelType.hasElectricCapability, let evRange = vehicle.evRange {
+            var text = evRange
+            if let percent = vehicle.evBatteryPercentage {
+                text += " · \(Int(percent))%"
+            }
+            result.append(Line(
+                id: 1, icon: "bolt.fill", iconColor: vehicle.chargingColor,
+                text: text, textColor: textColor
+            ))
+        }
+
+        // Charging line: speed and time remaining while charging.
+        if vehicle.isCharging == true {
+            var parts: [String] = []
+            if let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
+                parts.append(String(format: "%.1f kW", kw))
+            }
+            if let minutes = vehicle.chargeTimeRemainingMinutes, minutes > 0 {
+                parts.append(minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m")
+            }
+            result.append(Line(
+                id: 2, icon: "bolt.badge.clock.fill", iconColor: vehicle.chargingColor,
+                text: parts.isEmpty ? "Charging" : parts.joined(separator: " · "),
+                textColor: vehicle.chargingColor
+            ))
+        }
+
+        // Fallback so vehicles with no parsed range data still show the
+        // legacy rangeText instead of nothing.
+        if result.isEmpty, !vehicle.rangeText.isEmpty {
+            result.append(Line(
+                id: 3,
+                icon: vehicle.fuelType.hasElectricCapability ? "bolt.fill" : "fuelpump.fill",
+                iconColor: vehicle.fuelType.hasElectricCapability ? vehicle.chargingColor : .orange,
+                text: vehicle.rangeText, textColor: textColor
+            ))
+        }
+
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            ForEach(lines) { line in
+                HStack(spacing: 3) {
+                    Image(systemName: line.icon)
+                        .font(.caption2)
+                        .foregroundColor(line.iconColor)
+                    Text(line.text)
+                        .font(isSmall ? .caption2 : .caption)
+                        .foregroundColor(line.textColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+        }
     }
 }
 
@@ -263,15 +312,15 @@ extension WidgetActionEntity {
 
 struct VehicleButtonsView: View {
     let vehicle: VehicleEntity
-    let actions: [WidgetActionEntity]
+    let buttons: [ConfiguredWidgetButton]
     let isSmall: Bool
 
     var body: some View {
         if isSmall {
             // Small widget: 2-column grid, icons only
             LazyVGrid(columns: Array(repeating: GridItem(spacing: 4), count: 2), spacing: 4) {
-                ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
-                    actionButton(action)
+                ForEach(Array(buttons.enumerated()), id: \.offset) { _, button in
+                    actionButton(button)
                 }
             }
             .labelStyle(.iconOnly)
@@ -280,10 +329,10 @@ struct VehicleButtonsView: View {
         } else {
             // Medium widget: rows of two with full labels
             VStack(spacing: 8) {
-                ForEach(Array(actions.chunked(into: 2).enumerated()), id: \.offset) { _, row in
+                ForEach(Array(buttons.chunked(into: 2).enumerated()), id: \.offset) { _, row in
                     HStack(spacing: 6) {
-                        ForEach(Array(row.enumerated()), id: \.offset) { _, action in
-                            actionButton(action)
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, button in
+                            actionButton(button)
                         }
                     }
                 }
@@ -295,14 +344,14 @@ struct VehicleButtonsView: View {
     }
 
     @ViewBuilder
-    private func actionButton(_ action: WidgetActionEntity) -> some View {
-        if let intent = action.makeIntent(for: vehicle) {
+    private func actionButton(_ button: ConfiguredWidgetButton) -> some View {
+        if let intent = button.action.makeIntent(for: vehicle) {
             Button(intent: intent) {
-                Label(action.kind.defaultTitle, systemImage: action.displayIcon(for: vehicle))
+                Label(button.action.kind.defaultTitle, systemImage: button.action.displayIcon(for: vehicle))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .buttonStyle(WidgetButtonStyle(backgroundColor: action.kind.color(for: vehicle)))
+            .buttonStyle(WidgetButtonStyle(backgroundColor: button.color(for: vehicle)))
         }
     }
 }

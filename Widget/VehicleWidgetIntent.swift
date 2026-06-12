@@ -22,20 +22,39 @@ struct VehicleWidgetIntent: WidgetConfigurationIntent {
     )
     var vehicle: VehicleEntity?
 
+    /// Background override for this widget. "Default" follows the
+    /// vehicle's configured background color.
+    @Parameter(title: "Background")
+    var background: WidgetBackgroundEntity?
+
     // Configurable button slots. Optional so widgets configured before
-    // these parameters existed keep working — `slotActions` falls back
+    // these parameters existed keep working — `slotButtons` falls back
     // to the classic Lock/Unlock/Start/Stop set when nothing is set.
+    // Each button has an optional color override; "Default" follows the
+    // app's per-vehicle action color.
     @Parameter(title: "Button 1", optionsProvider: WidgetActionOptionsProvider(defaultKind: .lock))
     var action1: WidgetActionEntity?
+
+    @Parameter(title: "Button 1 Color")
+    var color1: WidgetColorEntity?
 
     @Parameter(title: "Button 2", optionsProvider: WidgetActionOptionsProvider(defaultKind: .unlock))
     var action2: WidgetActionEntity?
 
+    @Parameter(title: "Button 2 Color")
+    var color2: WidgetColorEntity?
+
     @Parameter(title: "Button 3", optionsProvider: WidgetActionOptionsProvider(defaultKind: .startClimate))
     var action3: WidgetActionEntity?
 
+    @Parameter(title: "Button 3 Color")
+    var color3: WidgetColorEntity?
+
     @Parameter(title: "Button 4", optionsProvider: WidgetActionOptionsProvider(defaultKind: .stopClimate))
     var action4: WidgetActionEntity?
+
+    @Parameter(title: "Button 4 Color")
+    var color4: WidgetColorEntity?
 
     init(vehicle: VehicleEntity?) {
         self.vehicle = vehicle
@@ -48,16 +67,135 @@ struct VehicleWidgetIntent: WidgetConfigurationIntent {
         action4 = .stopClimate
     }
 
-    /// The actions to render, in slot order. Empty ("None") slots are
-    /// dropped — the remaining buttons re-flow into the grid. A widget
-    /// with no slot configured at all (added before this feature, or
-    /// never edited) gets the classic four buttons.
-    var slotActions: [WidgetActionEntity] {
-        let slots = [action1, action2, action3, action4]
-        if slots.allSatisfy({ $0 == nil }) {
-            return [.lock, .unlock, .startClimate, .stopClimate]
+    /// The buttons to render, in slot order: action plus optional color
+    /// override. Empty ("None") slots are dropped — the remaining
+    /// buttons re-flow into the grid. A widget with no slot configured
+    /// at all (added before this feature, or never edited) gets the
+    /// classic four buttons.
+    var slotButtons: [ConfiguredWidgetButton] {
+        let slots: [(WidgetActionEntity?, WidgetColorEntity?)] = [
+            (action1, color1), (action2, color2), (action3, color3), (action4, color4)
+        ]
+        if slots.allSatisfy({ $0.0 == nil }) {
+            return [.lock, .unlock, .startClimate, .stopClimate].map {
+                ConfiguredWidgetButton(action: $0, colorName: nil)
+            }
         }
-        return slots.compactMap { $0 }.filter { $0.kind != .none }
+        return slots.compactMap { action, color in
+            guard let action, action.kind != .none else { return nil }
+            return ConfiguredWidgetButton(action: action, colorName: color?.paletteName)
+        }
+    }
+
+    /// Gradient to paint behind the widget — the override when one is
+    /// chosen, otherwise the vehicle's own background.
+    func effectiveGradient(for vehicle: VehicleEntity) -> [Color] {
+        if let background, let gradient = background.gradient {
+            return gradient
+        }
+        return vehicle.backgroundGradient
+    }
+}
+
+/// One rendered button: the action and the widget-local color override
+/// (palette name; `nil` = use the app's per-vehicle color).
+struct ConfiguredWidgetButton: Sendable {
+    let action: WidgetActionEntity
+    let colorName: String?
+
+    func color(for vehicle: VehicleEntity) -> Color {
+        if let colorName {
+            return CustomColor.color(forName: colorName, default: "blue")
+        }
+        return action.kind.color(for: vehicle)
+    }
+}
+
+// MARK: - Color / background override entities
+
+/// A palette color choice for a button override. The "Default" entry
+/// (id "default") means "no override — use the app's color".
+struct WidgetColorEntity: AppEntity, Identifiable, Sendable {
+    var id: String
+    var displayName: String
+
+    /// Palette name to feed `CustomColor`, or nil for the Default entry.
+    var paletteName: String? { id == "default" ? nil : id }
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Color"
+    static let defaultQuery = WidgetColorQuery()
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(displayName)")
+    }
+
+    static var appDefault: WidgetColorEntity {
+        WidgetColorEntity(id: "default", displayName: "Default")
+    }
+
+    static var all: [WidgetColorEntity] {
+        [.appDefault] + CustomColor.palette.map {
+            WidgetColorEntity(id: $0.name, displayName: $0.displayName)
+        }
+    }
+}
+
+struct WidgetColorQuery: EntityQuery {
+    func entities(for identifiers: [WidgetColorEntity.ID]) async throws -> [WidgetColorEntity] {
+        identifiers.compactMap { id in WidgetColorEntity.all.first { $0.id == id } }
+    }
+
+    func suggestedEntities() async throws -> [WidgetColorEntity] {
+        WidgetColorEntity.all
+    }
+
+    func defaultResult() async -> WidgetColorEntity? {
+        .appDefault
+    }
+}
+
+/// A widget-background choice. The "Default" entry (id
+/// "vehicle-setting") follows the vehicle's configured background; the
+/// rest mirror the app's background catalog.
+struct WidgetBackgroundEntity: AppEntity, Identifiable, Sendable {
+    var id: String
+    var displayName: String
+
+    /// Resolved gradient, or nil for the follow-the-vehicle entry.
+    var gradient: [Color]? {
+        guard id != "vehicle-setting" else { return nil }
+        return BBVehicle.availableBackgrounds.first { $0.name == id }?.gradient
+    }
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Background"
+    static let defaultQuery = WidgetBackgroundQuery()
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(displayName)")
+    }
+
+    static var vehicleSetting: WidgetBackgroundEntity {
+        WidgetBackgroundEntity(id: "vehicle-setting", displayName: "Default")
+    }
+
+    static var all: [WidgetBackgroundEntity] {
+        [.vehicleSetting] + BBVehicle.availableBackgrounds.map {
+            WidgetBackgroundEntity(id: $0.name, displayName: $0.displayName)
+        }
+    }
+}
+
+struct WidgetBackgroundQuery: EntityQuery {
+    func entities(for identifiers: [WidgetBackgroundEntity.ID]) async throws -> [WidgetBackgroundEntity] {
+        identifiers.compactMap { id in WidgetBackgroundEntity.all.first { $0.id == id } }
+    }
+
+    func suggestedEntities() async throws -> [WidgetBackgroundEntity] {
+        WidgetBackgroundEntity.all
+    }
+
+    func defaultResult() async -> WidgetBackgroundEntity? {
+        .vehicleSetting
     }
 }
 
