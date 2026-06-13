@@ -202,22 +202,6 @@ struct VehicleRangeInfoView: View {
             ))
         }
 
-        // Charging line: speed and time remaining while charging.
-        if vehicle.isCharging == true {
-            var parts: [String] = []
-            if let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
-                parts.append(String(format: "%.1f kW", kw))
-            }
-            if let minutes = vehicle.chargeTimeRemainingMinutes, minutes > 0 {
-                parts.append(minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m")
-            }
-            result.append(Line(
-                id: 2, icon: "bolt.badge.clock.fill", iconColor: vehicle.chargingColor,
-                text: parts.isEmpty ? "Charging" : parts.joined(separator: " · "),
-                textColor: vehicle.chargingColor
-            ))
-        }
-
         // Fallback so vehicles with no parsed range data still show the
         // legacy rangeText instead of nothing.
         if result.isEmpty, !vehicle.rangeText.isEmpty {
@@ -246,6 +230,43 @@ struct VehicleRangeInfoView: View {
                         .minimumScaleFactor(0.8)
                 }
             }
+
+            if let chargingLine {
+                chargingLine
+                    .font(isSmall ? .caption2 : .caption)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+    }
+
+    /// Charging status while charging: no icon; the speed is tinted
+    /// with the charging color, the time remaining keeps the default
+    /// text color. Built from concatenated `Text`s so the two segments
+    /// can carry different colors on one line.
+    private var chargingLine: Text? {
+        guard vehicle.isCharging == true else { return nil }
+
+        let speed: Text? = (vehicle.chargeSpeedKilowatts).flatMap { kw in
+            kw > 0
+                ? Text(String(format: "%.1f kW", kw)).foregroundColor(vehicle.chargingColor)
+                : nil
+        }
+        let time: Text? = (vehicle.chargeTimeRemainingMinutes).flatMap { minutes in
+            guard minutes > 0 else { return nil }
+            let formatted = minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+            return Text(formatted).foregroundColor(textColor)
+        }
+
+        switch (speed, time) {
+        case let (.some(speed), .some(time)):
+            return speed + Text(" · ").foregroundColor(textColor.opacity(0.7)) + time
+        case let (.some(speed), nil):
+            return speed
+        case let (nil, .some(time)):
+            return time
+        case (nil, nil):
+            return Text("Charging").foregroundColor(vehicle.chargingColor)
         }
     }
 }
