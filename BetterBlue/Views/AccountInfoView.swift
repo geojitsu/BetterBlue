@@ -38,6 +38,15 @@ struct AccountInfoView: View {
     @State private var showingRefreshTokenInfo: Bool = false
     @Namespace private var fallbackTransition
 
+    /// Refresh-token auth is a Hyundai EU feature only. Gates both the
+    /// header's mode toggle and the credential mode itself — without
+    /// the second gate, a non-EU account whose stored password is empty
+    /// (legacy rows predating local password persistence) lands in
+    /// "Change Refresh Token" mode with no toggle to escape it.
+    private var supportsRefreshTokenAuth: Bool {
+        account.brandEnum == .hyundai && account.regionEnum == .europe
+    }
+
     private var hasPasswordChanges: Bool {
         !newPassword.isEmpty
     }
@@ -119,7 +128,7 @@ struct AccountInfoView: View {
                     // Mirrors AddAccountView's header button. Only
                     // Hyundai EU supports refresh-token auth, so
                     // hide the affordance for everyone else.
-                    if account.brandEnum == .hyundai && account.regionEnum == .europe {
+                    if supportsRefreshTokenAuth {
                         Button {
                             if useToken {
                                 // Switching back to password is the
@@ -260,8 +269,14 @@ struct AccountInfoView: View {
             // then do we start in refresh-token mode. Password accounts
             // also cache a server-issued refresh token after login, so
             // keying off `refreshToken` alone wrongly flipped every
-            // password account into "Change Refresh Token" mode.
-            useToken = account.password.isEmpty && !account.refreshToken.isEmpty
+            // password account into "Change Refresh Token" mode. And
+            // only where token auth exists at all (Hyundai EU): some
+            // older non-EU accounts have an empty stored password, and
+            // without this gate they'd be locked into token mode since
+            // the Use Password toggle is EU-only.
+            useToken = supportsRefreshTokenAuth
+                && account.password.isEmpty
+                && !account.refreshToken.isEmpty
         }
     }
 
