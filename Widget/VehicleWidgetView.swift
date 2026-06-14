@@ -137,10 +137,11 @@ struct VehicleHeaderView: View {
                     .foregroundColor(textColor)
                     .lineLimit(1)
 
-                Text(updatedText)
+                subtitleLine
                     .font(.caption2)
                     .foregroundColor(textColor.opacity(0.7))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
             Spacer()
@@ -153,10 +154,58 @@ struct VehicleHeaderView: View {
         .padding(.bottom, isSmall ? 4 : 0)
     }
 
-    private var updatedText: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: vehicle.timestamp, relativeTo: Date())
+    /// The line under the title. Normally the absolute last-updated
+    /// time followed by lock/climate status glyphs (dot-separated). When
+    /// the user has just tapped a widget button, it's replaced by
+    /// "<command> requested at <time>" until a real status refresh lands.
+    @ViewBuilder
+    private var subtitleLine: some View {
+        if let pending = pendingCommand {
+            Text("\(pending.command) requested at \(absoluteTime(pending.date))")
+        } else {
+            statusLine
+        }
+    }
+
+    /// Absolute last-updated time + status glyphs as one concatenated
+    /// `Text` so it stays a single dot-separated line. Absolute (not
+    /// relative) because a widget's text is frozen between timeline
+    /// reloads — a relative "5m ago" would silently go stale.
+    private var statusLine: Text {
+        var line = Text(absoluteUpdated)
+        if let locked = vehicle.isLocked {
+            line = line + Text("  ·  ")
+                + Text(Image(systemName: locked ? "lock.fill" : "lock.open.fill"))
+        }
+        if let climateOn = vehicle.isClimateOn {
+            line = line + Text("  ·  ")
+                + Text(Image(systemName: climateOn ? "fan.fill" : "fan.slash"))
+        }
+        return line
+    }
+
+    /// The most recent widget-button command for this vehicle, but only
+    /// while it's still "pending" — newer than the last status refresh
+    /// and recent enough to be relevant (a real refresh that postdates
+    /// it means the status now reflects reality, so we stop showing it).
+    private var pendingCommand: (command: String, date: Date)? {
+        guard let latest = WidgetCommandStatus.latest(vin: vehicle.vin) else { return nil }
+        let lastUpdated = vehicle.lastUpdated ?? .distantPast
+        guard latest.date > lastUpdated,
+              Date().timeIntervalSince(latest.date) < 30 * 60 else { return nil }
+        return latest
+    }
+
+    private var absoluteUpdated: String {
+        let date = vehicle.timestamp
+        if Calendar.current.isDateInToday(date) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func absoluteTime(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
     }
 }
 

@@ -488,6 +488,11 @@ struct LockVehicleControlIntent: ControlConfigurationIntent {
         let targetVin = vehicle.vin
         let vehicleName = vehicle.displayName
 
+        // Optimistically surface the request on the widget right away,
+        // before the (possibly slow) command round-trips.
+        WidgetCommandStatus.record(command: "Lock", vin: targetVin)
+        WidgetCenter.shared.reloadAllTimelines()
+
         try await performVehicleActionWithVin(targetVin) { bbVehicle, account, context in
             try await account.lockVehicle(bbVehicle, modelContext: context)
         }
@@ -518,6 +523,9 @@ struct UnlockVehicleControlIntent: ControlConfigurationIntent {
         let targetVin = vehicle.vin
         let vehicleName = vehicle.displayName
 
+        WidgetCommandStatus.record(command: "Unlock", vin: targetVin)
+        WidgetCenter.shared.reloadAllTimelines()
+
         try await performVehicleActionWithVin(targetVin) { bbVehicle, account, context in
             try await account.unlockVehicle(bbVehicle, modelContext: context)
         }
@@ -547,6 +555,9 @@ struct StartClimateControlIntent: ControlConfigurationIntent {
         let presetName = preset.presetName
         let presetIcon = preset.presetIcon
         let targetVin = preset.vehicleVin
+
+        WidgetCommandStatus.record(command: "Start Climate", vin: targetVin)
+        WidgetCenter.shared.reloadAllTimelines()
 
         try await performVehicleActionWithVin(targetVin) { bbVehicle, account, context in
             if let climatePreset = bbVehicle.safeClimatePresets.first(where: { $0.id == presetId }) {
@@ -593,6 +604,9 @@ struct StopClimateControlIntent: ControlConfigurationIntent {
         let targetVin = vehicle.vin
         let vehicleName = vehicle.displayName
 
+        WidgetCommandStatus.record(command: "Stop Climate", vin: targetVin)
+        WidgetCenter.shared.reloadAllTimelines()
+
         try await performVehicleActionWithVin(targetVin) { bbVehicle, account, context in
             try await account.stopClimate(bbVehicle, modelContext: context)
         }
@@ -623,6 +637,9 @@ struct StartChargeControlIntent: ControlConfigurationIntent {
         let targetVin = vehicle.vin
         let vehicleName = vehicle.displayName
 
+        WidgetCommandStatus.record(command: "Start Charge", vin: targetVin)
+        WidgetCenter.shared.reloadAllTimelines()
+
         try await performVehicleActionWithVin(targetVin) { bbVehicle, account, context in
             try await account.startCharge(bbVehicle, modelContext: context)
         }
@@ -652,6 +669,9 @@ struct StopChargeControlIntent: ControlConfigurationIntent {
         }
         let targetVin = vehicle.vin
         let vehicleName = vehicle.displayName
+
+        WidgetCommandStatus.record(command: "Stop Charge", vin: targetVin)
+        WidgetCenter.shared.reloadAllTimelines()
 
         try await performVehicleActionWithVin(targetVin) { bbVehicle, account, context in
             try await account.stopCharge(bbVehicle, modelContext: context)
