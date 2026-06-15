@@ -140,9 +140,9 @@ struct VehicleHeaderView: View {
 
     /// 2×2: name on top, then a single status line that leads with the
     /// time and continues with the ranges + lock/climate glyphs, with
-    /// the percentage bars beneath — all left-aligned, full width.
+    /// the percentage bars beneath — all centered, full width.
     private var smallHeader: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .center, spacing: 3) {
             Text(vehicle.displayName)
                 .font(.caption)
                 .fontWeight(.bold)
@@ -154,7 +154,7 @@ struct VehicleHeaderView: View {
                 vehicle: vehicle, textColor: textColor, isSmall: true, leadingTime: absoluteUpdated
             )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     /// 4×2: name + time on the left; all status on the right, vertically
@@ -327,7 +327,7 @@ struct VehicleStatusColumn: View {
     @State private var lineWidth: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: isSmall ? .leading : .trailing, spacing: 3) {
+        VStack(alignment: isSmall ? .center : .trailing, spacing: 3) {
             statusLineView
                 .background(
                     GeometryReader { geo in
