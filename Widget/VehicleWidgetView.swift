@@ -294,7 +294,9 @@ struct VehicleStatusColumn: View {
             ForEach(axes) { axis in
                 Text(axis.range).foregroundColor(axis.color)
             }
-            if vehicle.isCharging == true, let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
+            // Charging readout is omitted on the small widget — its
+            // single-column header line is already tight with the time.
+            if !isSmall, vehicle.isCharging == true, let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
                 HStack(spacing: 1) {
                     Image(systemName: "bolt.fill").font(glyphFont)
                     Text("\(Int(kw.rounded()))kw")
