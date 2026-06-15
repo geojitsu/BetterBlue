@@ -250,27 +250,31 @@ struct VehicleStatusColumn: View {
         return result
     }
 
-    /// The top line: each axis's range in its fuel color, then lock and
-    /// climate glyphs in the default text color, dot-separated. The
-    /// fuel icons are omitted — the bar color already conveys the axis.
+    /// The top line: each axis's range in its fuel color, then smaller
+    /// lock and climate glyphs in the default text color, space-
+    /// separated. The fuel icons are omitted — the bar color already
+    /// conveys the axis.
     private var statusLine: Text {
         var line: Text?
         for axis in axes {
             let segment = Text(axis.range).foregroundColor(axis.color)
-            line = line.map { $0 + Text("  ·  ") + segment } ?? segment
+            line = line.map { $0 + Text("  ") + segment } ?? segment
         }
         var result = line ?? Text("")
         if let locked = vehicle.isLocked {
-            result = result + Text("  ·  ")
-                + Text(Image(systemName: locked ? "lock.fill" : "lock.open.fill"))
-                .foregroundColor(textColor)
+            result = result + Text("  ") + glyph(locked ? "lock.fill" : "lock.open.fill")
         }
         if let climateOn = vehicle.isClimateOn {
-            result = result + Text("  ·  ")
-                + Text(Image(systemName: climateOn ? "fan.fill" : "fan.slash"))
-                .foregroundColor(textColor)
+            result = result + Text("  ") + glyph(climateOn ? "fan.fill" : "fan.slash")
         }
         return result
+    }
+
+    /// A status glyph, rendered a step smaller than the range text.
+    private func glyph(_ systemName: String) -> Text {
+        Text(Image(systemName: systemName))
+            .font(isSmall ? .caption2 : .caption)
+            .foregroundColor(textColor)
     }
 
     // Width of the status line, measured so the bars are exactly as
