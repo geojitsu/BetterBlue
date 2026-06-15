@@ -250,10 +250,10 @@ struct VehicleStatusColumn: View {
         return result
     }
 
-    /// The top line: each axis's range in its fuel color, then smaller
-    /// lock and climate glyphs in the default text color, space-
-    /// separated. The fuel icons are omitted — the bar color already
-    /// conveys the axis.
+    /// The top line: each axis's range in its fuel color, a bolt + kW
+    /// charging readout when charging, then smaller lock and climate
+    /// glyphs in the default text color, space-separated. The fuel icons
+    /// are omitted — the bar color already conveys the axis.
     private var statusLine: Text {
         var line: Text?
         for axis in axes {
@@ -261,6 +261,11 @@ struct VehicleStatusColumn: View {
             line = line.map { $0 + Text("  ") + segment } ?? segment
         }
         var result = line ?? Text("")
+        if vehicle.isCharging == true, let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
+            result = result + Text("  ")
+                + glyph("bolt.fill", color: vehicle.chargingColor)
+                + Text("\(Int(kw.rounded()))").foregroundColor(vehicle.chargingColor)
+        }
         if let locked = vehicle.isLocked {
             result = result + Text("  ") + glyph(locked ? "lock.fill" : "lock.open.fill")
         }
@@ -271,10 +276,10 @@ struct VehicleStatusColumn: View {
     }
 
     /// A status glyph, rendered a step smaller than the range text.
-    private func glyph(_ systemName: String) -> Text {
+    private func glyph(_ systemName: String, color: Color? = nil) -> Text {
         Text(Image(systemName: systemName))
-            .font(isSmall ? .caption2 : .caption)
-            .foregroundColor(textColor)
+            .font(isSmall ? .system(size: 9) : .caption2)
+            .foregroundColor(color ?? textColor)
     }
 
     // Width of the status line, measured so the bars are exactly as
@@ -284,7 +289,7 @@ struct VehicleStatusColumn: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 3) {
             statusLine
-                .font(isSmall ? .caption : .subheadline)
+                .font(isSmall ? .caption2 : .caption)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .background(
