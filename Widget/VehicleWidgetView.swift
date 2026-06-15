@@ -252,35 +252,40 @@ struct VehicleStatusColumn: View {
 
     /// The top line: each axis's range in its fuel color, a bolt + kW
     /// charging readout when charging, then smaller lock and climate
-    /// glyphs in the default text color, space-separated. The fuel icons
-    /// are omitted — the bar color already conveys the axis.
-    private var statusLine: Text {
-        var line: Text?
-        for axis in axes {
-            let segment = Text(axis.range).foregroundColor(axis.color)
-            line = line.map { $0 + Text("  ") + segment } ?? segment
+    /// glyphs in the default text color. The fuel icons are omitted —
+    /// the bar color already conveys the axis. Laid out as an HStack
+    /// (rather than concatenated Text, whose `+` is deprecated in
+    /// iOS 26) so each run keeps its own color and glyph size.
+    private var statusLineView: some View {
+        HStack(spacing: 5) {
+            ForEach(axes) { axis in
+                Text(axis.range).foregroundColor(axis.color)
+            }
+            if vehicle.isCharging == true, let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
+                HStack(spacing: 1) {
+                    Image(systemName: "bolt.fill").font(glyphFont)
+                    Text("\(Int(kw.rounded()))")
+                }
+                .foregroundColor(vehicle.chargingColor)
+            }
+            if let locked = vehicle.isLocked {
+                Image(systemName: locked ? "lock.fill" : "lock.open.fill")
+                    .font(glyphFont)
+                    .foregroundColor(textColor)
+            }
+            if let climateOn = vehicle.isClimateOn {
+                Image(systemName: climateOn ? "fan.fill" : "fan.slash")
+                    .font(glyphFont)
+                    .foregroundColor(textColor)
+            }
         }
-        var result = line ?? Text("")
-        if vehicle.isCharging == true, let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
-            result = result + Text("  ")
-                + glyph("bolt.fill", color: vehicle.chargingColor)
-                + Text("\(Int(kw.rounded()))").foregroundColor(vehicle.chargingColor)
-        }
-        if let locked = vehicle.isLocked {
-            result = result + Text("  ") + glyph(locked ? "lock.fill" : "lock.open.fill")
-        }
-        if let climateOn = vehicle.isClimateOn {
-            result = result + Text("  ") + glyph(climateOn ? "fan.fill" : "fan.slash")
-        }
-        return result
+        .font(isSmall ? .caption2 : .caption)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
     }
 
-    /// A status glyph, rendered a step smaller than the range text.
-    private func glyph(_ systemName: String, color: Color? = nil) -> Text {
-        Text(Image(systemName: systemName))
-            .font(isSmall ? .system(size: 9) : .caption2)
-            .foregroundColor(color ?? textColor)
-    }
+    /// Lock/climate/charging glyphs render a step smaller than the range.
+    private var glyphFont: Font { isSmall ? .system(size: 9) : .caption2 }
 
     // Width of the status line, measured so the bars are exactly as
     // wide as the text above them rather than spanning the whole column.
@@ -288,10 +293,7 @@ struct VehicleStatusColumn: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 3) {
-            statusLine
-                .font(isSmall ? .caption2 : .caption)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            statusLineView
                 .background(
                     GeometryReader { geo in
                         Color.clear.preference(key: StatusLineWidthKey.self, value: geo.size.width)
