@@ -66,14 +66,17 @@ struct VehicleControlsWidget: View {
 
 struct WidgetButtonStyle: ButtonStyle {
     let backgroundColor: Color
+    /// Compact buttons (the small widget's single column) use less
+    /// vertical padding and don't stretch to fill height.
+    var compact: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundColor(.white)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.vertical, compact ? 5 : 12)
+            .frame(maxWidth: .infinity, maxHeight: compact ? nil : .infinity)
             .background(backgroundColor.opacity(0.6))
-            .cornerRadius(12)
+            .cornerRadius(compact ? 8 : 12)
             .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
@@ -88,7 +91,7 @@ struct UnifiedVehicleWidget: View {
     let isSmall: Bool
 
     var body: some View {
-        VStack(spacing: isSmall ? 0 : 8) {
+        VStack(spacing: isSmall ? 6 : 8) {
             // Vehicle header
             VehicleHeaderView(vehicle: vehicle, gradient: gradient, isSmall: isSmall)
 
@@ -96,8 +99,8 @@ struct UnifiedVehicleWidget: View {
             VehicleButtonsView(vehicle: vehicle, buttons: buttons, isSmall: isSmall)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 16)
-        .padding(.vertical, isSmall ? 0 : 16)
+        .padding(.horizontal, isSmall ? 12 : 16)
+        .padding(.vertical, isSmall ? 10 : 16)
     }
 }
 
@@ -126,13 +129,44 @@ struct VehicleHeaderView: View {
     }
 
     var body: some View {
-        // Name + time on the left; all status (ranges, lock/climate
-        // glyphs, percentage bars) on the right, vertically centered
-        // against the title block.
+        Group {
+            if isSmall {
+                smallHeader
+            } else {
+                mediumHeader
+            }
+        }
+        .padding(.horizontal, isSmall ? 0 : 8)
+        .padding(.vertical, isSmall ? 0 : 6)
+        .padding(.bottom, isSmall ? 2 : 0)
+    }
+
+    /// 2×2: name on top, then a single status line that leads with the
+    /// time and continues with the ranges + lock/climate glyphs, with
+    /// the percentage bars beneath — all left-aligned, full width.
+    private var smallHeader: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(vehicle.displayName)
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(textColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            VehicleStatusColumn(
+                vehicle: vehicle, textColor: textColor, isSmall: true, leadingTime: absoluteUpdated
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 4×2: name + time on the left; all status on the right, vertically
+    /// centered against the title block.
+    private var mediumHeader: some View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(vehicle.displayName)
-                    .font(isSmall ? .caption : .headline)
+                    .font(.headline)
                     .fontWeight(.bold)
                     .foregroundColor(textColor)
                     .lineLimit(1)
@@ -147,13 +181,9 @@ struct VehicleHeaderView: View {
 
             Spacer(minLength: 4)
 
-            VehicleStatusColumn(vehicle: vehicle, textColor: textColor, isSmall: isSmall)
-                .frame(maxWidth: isSmall ? 120 : 196, alignment: .trailing)
+            VehicleStatusColumn(vehicle: vehicle, textColor: textColor, isSmall: false)
+                .frame(maxWidth: 196, alignment: .trailing)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, isSmall ? 4 : 6)
-        .cornerRadius(12)
-        .padding(.bottom, isSmall ? 4 : 0)
     }
 
     /// The line under the title. Normally the absolute last-updated
@@ -208,6 +238,9 @@ struct VehicleStatusColumn: View {
     let vehicle: VehicleEntity
     let textColor: Color
     let isSmall: Bool
+    /// When set (small widget), the status line leads with this text —
+    /// the last-updated time, which has no room of its own there.
+    var leadingTime: String?
 
     /// One fuel axis: its color, formatted range, and fill level. EV
     /// uses the charging color, gas uses the gas color.
@@ -258,13 +291,16 @@ struct VehicleStatusColumn: View {
     /// iOS 26) so each run keeps its own color and glyph size.
     private var statusLineView: some View {
         HStack(spacing: 5) {
+            if let leadingTime {
+                Text(leadingTime).foregroundColor(textColor.opacity(0.7))
+            }
             ForEach(axes) { axis in
                 Text(axis.range).foregroundColor(axis.color)
             }
             if vehicle.isCharging == true, let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
                 HStack(spacing: 1) {
                     Image(systemName: "bolt.fill").font(glyphFont)
-                    Text("\(Int(kw.rounded()))")
+                    Text("\(Int(kw.rounded()))kw")
                 }
                 .foregroundColor(vehicle.chargingColor)
             }
@@ -292,7 +328,7 @@ struct VehicleStatusColumn: View {
     @State private var lineWidth: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 3) {
+        VStack(alignment: isSmall ? .leading : .trailing, spacing: 3) {
             statusLineView
                 .background(
                     GeometryReader { geo in
@@ -396,14 +432,13 @@ struct VehicleButtonsView: View {
 
     var body: some View {
         if isSmall {
-            // Small widget: 2-column grid, icons only
-            LazyVGrid(columns: Array(repeating: GridItem(spacing: 4), count: 2), spacing: 4) {
+            // Small widget: single compact column with icon + label.
+            VStack(spacing: 4) {
                 ForEach(Array(buttons.enumerated()), id: \.offset) { _, button in
-                    actionButton(button)
+                    actionButton(button, compact: true)
                 }
             }
-            .labelStyle(.iconOnly)
-            .font(.headline)
+            .font(.caption2)
             .fontWeight(.medium)
         } else {
             // Medium widget: rows of two with full labels
@@ -423,14 +458,14 @@ struct VehicleButtonsView: View {
     }
 
     @ViewBuilder
-    private func actionButton(_ button: ConfiguredWidgetButton) -> some View {
+    private func actionButton(_ button: ConfiguredWidgetButton, compact: Bool = false) -> some View {
         if let intent = button.action.makeIntent(for: vehicle) {
             Button(intent: intent) {
                 Label(button.action.kind.defaultTitle, systemImage: button.action.displayIcon(for: vehicle))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .buttonStyle(WidgetButtonStyle(backgroundColor: button.color(for: vehicle)))
+            .buttonStyle(WidgetButtonStyle(backgroundColor: button.color(for: vehicle), compact: compact))
         }
     }
 }
