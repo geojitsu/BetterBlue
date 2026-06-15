@@ -66,17 +66,14 @@ struct VehicleControlsWidget: View {
 
 struct WidgetButtonStyle: ButtonStyle {
     let backgroundColor: Color
-    /// Compact buttons (the small widget's single column) use less
-    /// vertical padding and don't stretch to fill height.
-    var compact: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundColor(.white)
-            .padding(.vertical, compact ? 5 : 12)
-            .frame(maxWidth: .infinity, maxHeight: compact ? nil : .infinity)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(backgroundColor.opacity(0.6))
-            .cornerRadius(compact ? 8 : 12)
+            .cornerRadius(12)
             .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
@@ -99,8 +96,8 @@ struct UnifiedVehicleWidget: View {
             VehicleButtonsView(vehicle: vehicle, buttons: buttons, isSmall: isSmall)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, isSmall ? 12 : 16)
-        .padding(.vertical, isSmall ? 10 : 16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, isSmall ? 6 : 16)
     }
 }
 
@@ -432,13 +429,14 @@ struct VehicleButtonsView: View {
 
     var body: some View {
         if isSmall {
-            // Small widget: single compact column with icon + label.
-            VStack(spacing: 4) {
+            // Small widget: 2-column grid, icons only
+            LazyVGrid(columns: Array(repeating: GridItem(spacing: 4), count: 2), spacing: 4) {
                 ForEach(Array(buttons.enumerated()), id: \.offset) { _, button in
-                    actionButton(button, compact: true)
+                    actionButton(button)
                 }
             }
-            .font(.caption2)
+            .labelStyle(.iconOnly)
+            .font(.headline)
             .fontWeight(.medium)
         } else {
             // Medium widget: rows of two with full labels
@@ -458,14 +456,14 @@ struct VehicleButtonsView: View {
     }
 
     @ViewBuilder
-    private func actionButton(_ button: ConfiguredWidgetButton, compact: Bool = false) -> some View {
+    private func actionButton(_ button: ConfiguredWidgetButton) -> some View {
         if let intent = button.action.makeIntent(for: vehicle) {
             Button(intent: intent) {
                 Label(button.action.kind.defaultTitle, systemImage: button.action.displayIcon(for: vehicle))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .buttonStyle(WidgetButtonStyle(backgroundColor: button.color(for: vehicle), compact: compact))
+            .buttonStyle(WidgetButtonStyle(backgroundColor: button.color(for: vehicle)))
         }
     }
 }
