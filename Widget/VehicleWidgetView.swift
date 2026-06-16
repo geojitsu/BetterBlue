@@ -387,15 +387,17 @@ struct VehicleStatusColumn: View {
     }
 
     /// App-style charging bar: a taller filled track with the time
-    /// remaining left-aligned inside it and a dashed vertical marker at
-    /// the target charge level — mirroring the main sheet's EV bar.
+    /// remaining and charge speed inside it and a dashed vertical marker
+    /// at the target charge level — mirroring the main sheet's EV bar.
+    /// Text positions are fill-aware so they sit over the green fill or
+    /// the gray remainder rather than straddling the boundary/outline.
     private func chargingBar(_ axis: Axis) -> some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 5).fill(textColor.opacity(0.22))
                 RoundedRectangle(cornerRadius: 5)
                     .fill(axis.color)
-                    .frame(width: geo.size.width * min(max(axis.fraction, 0), 1))
+                    .frame(width: fillWidth(axis, geo.size.width))
 
                 if let target = vehicle.targetStateOfCharge, target < 100 {
                     ChargeBarLine()
@@ -405,29 +407,41 @@ struct VehicleStatusColumn: View {
                         .offset(x: geo.size.width * (Double(target) / 100.0))
                 }
 
+                // Time remaining (left): over the green fill when there's
+                // room for it (>25%), otherwise shifted to the start of
+                // the gray remainder so it's not cramped on a thin fill.
                 if let minutes = vehicle.chargeTimeRemainingMinutes, minutes > 0 {
                     Text(timeRemainingString(minutes))
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
                         .padding(.leading, 5)
+                        .offset(x: axis.fraction > 0.25 ? 0 : fillWidth(axis, geo.size.width))
                 }
 
-                // Charge speed, right-aligned in the bar.
+                // Charge speed (right): right-aligned over the gray when
+                // the fill is small (<80%); once the fill is large the
+                // gray is too thin, so right-align to the green fill edge
+                // instead so it stays clear of the rounded outline.
                 if let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
-                    HStack {
-                        Spacer()
-                        Text("\(Int(kw.rounded()))kw")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.white)
-                            .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
-                            .padding(.trailing, 6)
-                    }
-                    .frame(maxWidth: .infinity)
+                    Text("\(Int(kw.rounded()))kw")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
+                        .padding(.trailing, 6)
+                        .frame(
+                            width: axis.fraction < 0.8 ? geo.size.width : fillWidth(axis, geo.size.width),
+                            alignment: .trailing
+                        )
                 }
             }
         }
         .frame(width: lineWidth > 0 ? lineWidth : nil, height: 18)
+    }
+
+    /// Pixel width of the filled portion for an axis's fraction.
+    private func fillWidth(_ axis: Axis, _ width: CGFloat) -> CGFloat {
+        width * min(max(axis.fraction, 0), 1)
     }
 
     private func timeRemainingString(_ minutes: Int) -> String {
