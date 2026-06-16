@@ -20,18 +20,10 @@ struct BetterBlueWidget: Widget {
             intent: VehicleWidgetIntent.self,
             provider: VehicleTimelineProvider(),
         ) { entry in
+            // Background is set inside VehicleWidgetEntryView (honoring
+            // the configured override + the adaptive Default). Declaring
+            // a second containerBackground here would conflict with it.
             VehicleWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
-                    if let vehicle = entry.vehicle {
-                        LinearGradient(
-                            gradient: Gradient(colors: vehicle.backgroundGradient),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing,
-                        )
-                    } else {
-                        Color.gray.opacity(0.1)
-                    }
-                }
         }
         .contentMarginsDisabled() // Here
         .configurationDisplayName("Vehicle Control")

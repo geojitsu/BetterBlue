@@ -12,19 +12,23 @@ import WidgetKit
 
 struct VehicleWidgetEntryView: View {
     let entry: VehicleWidgetEntry
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if let vehicle = entry.vehicle {
-            let gradient = entry.configuration.effectiveGradient(for: vehicle, colorScheme: colorScheme)
+            // The background (and its matching text color) are resolved
+            // here. "Default" uses dynamic colors so it swaps with the
+            // system appearance at the render layer — no colorScheme env.
+            let style = WidgetBackground.style(
+                forName: entry.configuration.effectiveBackgroundName(for: vehicle)
+            )
             VehicleControlsWidget(
                 vehicle: vehicle,
                 buttons: entry.configuration.slotButtons,
-                gradient: gradient
+                textColor: style.textColor
             )
             .containerBackground(for: .widget) {
                 LinearGradient(
-                    gradient: Gradient(colors: gradient),
+                    gradient: Gradient(colors: style.gradient),
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -50,7 +54,7 @@ struct VehicleWidgetEntryView: View {
 struct VehicleControlsWidget: View {
     let vehicle: VehicleEntity
     let buttons: [ConfiguredWidgetButton]
-    let gradient: [Color]
+    let textColor: Color
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
@@ -58,7 +62,7 @@ struct VehicleControlsWidget: View {
             UnifiedVehicleWidget(
                 vehicle: vehicle,
                 buttons: buttons,
-                gradient: gradient,
+                textColor: textColor,
                 isSmall: family == .systemSmall
             )
         }
@@ -85,13 +89,13 @@ struct WidgetButtonStyle: ButtonStyle {
 struct UnifiedVehicleWidget: View {
     let vehicle: VehicleEntity
     let buttons: [ConfiguredWidgetButton]
-    let gradient: [Color]
+    let textColor: Color
     let isSmall: Bool
 
     var body: some View {
         VStack(spacing: isSmall ? 6 : 8) {
             // Vehicle header
-            VehicleHeaderView(vehicle: vehicle, gradient: gradient, isSmall: isSmall)
+            VehicleHeaderView(vehicle: vehicle, textColor: textColor, isSmall: isSmall)
 
             // Action buttons
             VehicleButtonsView(vehicle: vehicle, buttons: buttons, isSmall: isSmall)
@@ -102,29 +106,52 @@ struct UnifiedVehicleWidget: View {
     }
 }
 
+/// Resolves a background catalog name to its gradient + matching text
+/// color. "default" is adaptive: built from dynamic `UIColor`s so it
+/// swaps with the system appearance at the render layer — instantly,
+/// like stock widgets, rather than waiting on a timeline reload. Light
+/// mode uses `systemBackground` (matching the stock light widget
+/// surface); dark mode uses the dark-glass gradient. Text is
+/// `Color.label` so it flips black/white with the surface.
+enum WidgetBackground {
+    static func style(forName name: String) -> (gradient: [Color], textColor: Color) {
+        if name == "default" {
+            return (adaptiveDefaultGradient, Color(uiColor: .label))
+        }
+        let gradient = BBVehicle.availableBackgrounds.first { $0.name == name }?.gradient
+            ?? BBVehicle.availableBackgrounds[0].gradient
+        return (gradient, isLight(gradient.first) ? .black : .white)
+    }
+
+    private static let adaptiveDefaultGradient: [Color] = [
+        dynamicSurface(darkRed: 0.11, darkGreen: 0.11, darkBlue: 0.12),
+        dynamicSurface(darkRed: 0.17, darkGreen: 0.17, darkBlue: 0.18)
+    ]
+
+    private static func dynamicSurface(darkRed: CGFloat, darkGreen: CGFloat, darkBlue: CGFloat) -> Color {
+        Color(uiColor: UIColor { trait in
+            trait.userInterfaceStyle == .dark
+                ? UIColor(red: darkRed, green: darkGreen, blue: darkBlue, alpha: 1)
+                : .systemBackground
+        })
+    }
+
+    private static func isLight(_ color: Color?) -> Bool {
+        guard let color else { return false }
+        let uiColor = UIColor(color)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return (red * 0.299 + green * 0.587 + blue * 0.114) > 0.5
+    }
+}
+
 struct VehicleHeaderView: View {
     let vehicle: VehicleEntity
-    let gradient: [Color]
+    /// Resolved by `WidgetBackground` to match the background — a fixed
+    /// black/white for solid backgrounds, or dynamic `Color.label` for
+    /// the adaptive Default.
+    let textColor: Color
     let isSmall: Bool
-
-    private var textColor: Color {
-        guard let primaryColor = gradient.first else { return .primary }
-        return isLightColor(primaryColor) ? .black : .white
-    }
-
-    private func isLightColor(_ color: Color) -> Bool {
-        let uiColor = UIColor(color)
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-
-        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-
-        // Calculate perceived brightness using standard luminance formula
-        let brightness = (red * 0.299) + (green * 0.587) + (blue * 0.114)
-        return brightness > 0.5
-    }
 
     var body: some View {
         Group {

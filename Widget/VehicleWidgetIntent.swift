@@ -87,23 +87,14 @@ struct VehicleWidgetIntent: WidgetConfigurationIntent {
         }
     }
 
-    /// Gradient to paint behind the widget — the override when one is
-    /// chosen, otherwise the vehicle's own background. The "Default"
-    /// background is adaptive on the widget: white in light mode, dark
-    /// glass in dark mode (the in-app Default stays its fixed light
-    /// gray).
-    func effectiveGradient(for vehicle: VehicleEntity, colorScheme: ColorScheme) -> [Color] {
-        let name = effectiveBackgroundName(for: vehicle)
-        let resolved = name == "default"
-            ? (colorScheme == .dark ? "darkGlass" : "white")
-            : name
-        return BBVehicle.availableBackgrounds.first { $0.name == resolved }?.gradient
-            ?? BBVehicle.availableBackgrounds[0].gradient
-    }
-
     /// The catalog name of the background to paint: the override's id
-    /// when one is set, otherwise the vehicle's own background name.
-    private func effectiveBackgroundName(for vehicle: VehicleEntity) -> String {
+    /// when one is set, otherwise the vehicle's own (legacy) background
+    /// name. The actual gradient + text color — including the adaptive
+    /// "default" — is resolved view-side in `WidgetBackground`, which
+    /// can use dynamic colors that swap with the system appearance.
+    /// (The retired "vehicle-setting" id, if still stored on an old
+    /// widget, falls through to the vehicle's background.)
+    func effectiveBackgroundName(for vehicle: VehicleEntity) -> String {
         if let background, background.id != "vehicle-setting" {
             return background.id
         }
@@ -168,18 +159,12 @@ struct WidgetColorQuery: EntityQuery {
     }
 }
 
-/// A widget-background choice. The "Default" entry (id
-/// "vehicle-setting") follows the vehicle's configured background; the
-/// rest mirror the app's background catalog.
+/// A widget-background choice — the entries mirror the app's background
+/// catalog. "Default" is the default and resolves adaptively (white in
+/// light mode, dark glass in dark) view-side.
 struct WidgetBackgroundEntity: AppEntity, Identifiable, Sendable {
     var id: String
     var displayName: String
-
-    /// Resolved gradient, or nil for the follow-the-vehicle entry.
-    var gradient: [Color]? {
-        guard id != "vehicle-setting" else { return nil }
-        return BBVehicle.availableBackgrounds.first { $0.name == id }?.gradient
-    }
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Background"
     static let defaultQuery = WidgetBackgroundQuery()
@@ -188,17 +173,14 @@ struct WidgetBackgroundEntity: AppEntity, Identifiable, Sendable {
         DisplayRepresentation(title: "\(displayName)")
     }
 
-    static var vehicleSetting: WidgetBackgroundEntity {
-        // Not "Default" — the background catalog itself has an option
-        // named Default (a real gradient), and the picker showed the
-        // two side by side as indistinguishable twins.
-        WidgetBackgroundEntity(id: "vehicle-setting", displayName: "Vehicle Setting")
-    }
-
     static var all: [WidgetBackgroundEntity] {
-        [.vehicleSetting] + BBVehicle.availableBackgrounds.map {
+        BBVehicle.availableBackgrounds.map {
             WidgetBackgroundEntity(id: $0.name, displayName: $0.displayName)
         }
+    }
+
+    static var defaultBackground: WidgetBackgroundEntity? {
+        all.first { $0.id == "default" }
     }
 }
 
@@ -212,7 +194,7 @@ struct WidgetBackgroundQuery: EntityQuery {
     }
 
     func defaultResult() async -> WidgetBackgroundEntity? {
-        .vehicleSetting
+        .defaultBackground
     }
 }
 
