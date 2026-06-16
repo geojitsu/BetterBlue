@@ -325,15 +325,9 @@ struct VehicleStatusColumn: View {
             ForEach(axes) { axis in
                 Text(axis.range).foregroundColor(axis.color)
             }
-            // Charging readout is omitted on the small widget — its
-            // single-column header line is already tight with the time.
-            if !isSmall, vehicle.isCharging == true, let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
-                HStack(spacing: 1) {
-                    Image(systemName: "bolt.fill").font(glyphFont)
-                    Text("\(Int(kw.rounded()))kw")
-                }
-                .foregroundColor(vehicle.chargingColor)
-            }
+            // Charge speed is no longer shown here — it lives inside the
+            // charging bar (right-aligned) so the PHEV status line, which
+            // already carries two ranges, doesn't get cut off.
             if let locked = vehicle.isLocked {
                 Image(systemName: locked ? "lock.fill" : "lock.open.fill")
                     .font(glyphFont)
@@ -417,6 +411,19 @@ struct VehicleStatusColumn: View {
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
                         .padding(.leading, 5)
+                }
+
+                // Charge speed, right-aligned in the bar.
+                if let kw = vehicle.chargeSpeedKilowatts, kw > 0 {
+                    HStack {
+                        Spacer()
+                        Text("\(Int(kw.rounded()))kw")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
+                            .padding(.trailing, 6)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
