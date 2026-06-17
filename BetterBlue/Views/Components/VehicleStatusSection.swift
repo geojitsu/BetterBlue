@@ -226,11 +226,20 @@ struct VehicleStatusColumn: View {
     }
 }
 
-/// Vertical line shape for the charging bar's target-SOC marker.
+/// Vertical line for the charging bar's target-SOC marker, drawn as two
+/// segments with a clear band in the vertical center so it doesn't run
+/// through the centered time/speed labels.
 private struct ChargeBarLine: Shape {
+    /// Height of the gap left clear in the middle (≈ the label height).
+    var clearBand: CGFloat = 11
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
+        let topEnd = max(rect.minY, rect.midY - clearBand / 2)
+        let bottomStart = min(rect.maxY, rect.midY + clearBand / 2)
         path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: topEnd))
+        path.move(to: CGPoint(x: rect.midX, y: bottomStart))
         path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
         return path
     }
