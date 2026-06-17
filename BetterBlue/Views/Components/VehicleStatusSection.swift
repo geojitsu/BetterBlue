@@ -232,36 +232,47 @@ struct VehicleStatusColumn: View {
     }
 }
 
-/// Charge-limit target marker: a filled "valley" half-disc hanging from
-/// the top edge and a "mountain" half-disc rising from the bottom edge,
-/// both centered on `centerX`. Each half-disc is a semicircle (two
-/// quarter circles) whose `radius` matches the bar's corner radius, so
-/// the curves read as continuations of the bar. Filled white (with the
-/// same shadow as the bar's text) and clipped to the bar by the caller,
-/// so it never spills past the rounded edge near 99%. Shared by the
-/// widget status bar and the main sheet's `EVChargingProgressView`.
+/// Charge-limit target marker: a filled "valley" pointing down from the
+/// top edge and a "mountain" pointing up from the bottom edge, both
+/// centered on `centerX`. Each is a pointed shape whose two sides are
+/// curves (radius `radius`, matching the bar's corner radius) that bow
+/// inward and meet at a cusp — pointy, not a smooth dome. Filled white
+/// (with the bar text's shadow) and clipped to the bar by the caller, so
+/// it never spills past the rounded edge near 99%. Shared by the widget
+/// status bar and the main sheet's `EVChargingProgressView`.
 struct ChargeTargetMarker: Shape {
     /// Target x within the rect (absolute, not a fraction).
     var centerX: CGFloat
-    /// Half-disc radius — match the bar's corner radius.
+    /// Marker half-width and depth — match the bar's corner radius. The
+    /// control points sit on the edge so each side reaches the cusp with
+    /// a vertical tangent (a clean point).
     var radius: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
+        let cx = centerX
 
-        // Valley: lower half-disc on the top edge (curves down into bar).
-        path.move(to: CGPoint(x: centerX + radius, y: rect.minY))
-        path.addArc(
-            center: CGPoint(x: centerX, y: rect.minY), radius: radius,
-            startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false
+        // Valley: point reaching down from the top edge.
+        path.move(to: CGPoint(x: cx - radius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: cx, y: rect.minY + radius),
+            control: CGPoint(x: cx, y: rect.minY)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: cx + radius, y: rect.minY),
+            control: CGPoint(x: cx, y: rect.minY)
         )
         path.closeSubpath()
 
-        // Mountain: upper half-disc on the bottom edge (curves up).
-        path.move(to: CGPoint(x: centerX - radius, y: rect.maxY))
-        path.addArc(
-            center: CGPoint(x: centerX, y: rect.maxY), radius: radius,
-            startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false
+        // Mountain: point reaching up from the bottom edge.
+        path.move(to: CGPoint(x: cx - radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: cx, y: rect.maxY - radius),
+            control: CGPoint(x: cx, y: rect.maxY)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: cx + radius, y: rect.maxY),
+            control: CGPoint(x: cx, y: rect.maxY)
         )
         path.closeSubpath()
 
