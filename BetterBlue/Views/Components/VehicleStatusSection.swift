@@ -176,12 +176,17 @@ struct VehicleStatusColumn: View {
                     .fill(axis.color)
                     .frame(width: fillWidth(axis, geo.size.width))
 
+                // Target marker: a "v" pinching down from the top edge and
+                // a "^" pinching up from the bottom edge at the target SOC.
+                // Clipped to the bar so it doesn't spill past the rounded
+                // edge near 99%; absent entirely at 100%.
                 if let target = data.targetStateOfCharge, target < 100 {
-                    ChargeBarLine()
-                        .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
-                        .foregroundColor(.white.opacity(0.85))
-                        .frame(width: 1.5)
-                        .offset(x: geo.size.width * (Double(target) / 100.0))
+                    ChargeTargetMarker(centerX: geo.size.width * (Double(target) / 100.0))
+                        .stroke(
+                            Color.white.opacity(0.9),
+                            style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
                 }
 
                 // Time remaining (left): over the green fill when there's
@@ -226,21 +231,43 @@ struct VehicleStatusColumn: View {
     }
 }
 
-/// Vertical line for the charging bar's target-SOC marker, drawn as two
-/// segments with a clear band in the vertical center so it doesn't run
-/// through the centered time/speed labels.
-private struct ChargeBarLine: Shape {
-    /// Height of the gap left clear in the middle (≈ the label height).
-    var clearBand: CGFloat = 11
+/// Charge-limit target marker: a "v" pinching down from the top edge and
+/// a "^" pinching up from the bottom edge, both centered on `centerX`.
+/// The legs are quadratic curves (rather than straight triangles) so they
+/// read as soft chevrons matching the bar's rounded corners.
+private struct ChargeTargetMarker: Shape {
+    /// Target x within the rect (absolute, not a fraction).
+    var centerX: CGFloat
+    /// Half the marker's width at the bar edge.
+    var halfWidth: CGFloat = 4.5
+    /// How far each chevron's point reaches in from its edge.
+    var reach: CGFloat = 5
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let topEnd = max(rect.minY, rect.midY - clearBand / 2)
-        let bottomStart = min(rect.maxY, rect.midY + clearBand / 2)
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.midX, y: topEnd))
-        path.move(to: CGPoint(x: rect.midX, y: bottomStart))
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        let cx = centerX
+
+        // Top "v" — base on the top edge, point reaching down into the bar.
+        path.move(to: CGPoint(x: cx - halfWidth, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: cx, y: rect.minY + reach),
+            control: CGPoint(x: cx - halfWidth * 0.35, y: rect.minY + reach * 0.7)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: cx + halfWidth, y: rect.minY),
+            control: CGPoint(x: cx + halfWidth * 0.35, y: rect.minY + reach * 0.7)
+        )
+
+        // Bottom "^" — base on the bottom edge, point reaching up.
+        path.move(to: CGPoint(x: cx - halfWidth, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: cx, y: rect.maxY - reach),
+            control: CGPoint(x: cx - halfWidth * 0.35, y: rect.maxY - reach * 0.7)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: cx + halfWidth, y: rect.maxY),
+            control: CGPoint(x: cx + halfWidth * 0.35, y: rect.maxY - reach * 0.7)
+        )
         return path
     }
 }
