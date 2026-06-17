@@ -234,8 +234,10 @@ struct VehicleStatusColumn: View {
 /// Charge-limit target marker: a "v" pinching down from the top edge and
 /// a "^" pinching up from the bottom edge, both centered on `centerX`.
 /// The legs are quadratic curves (rather than straight triangles) so they
-/// read as soft chevrons matching the bar's rounded corners.
-private struct ChargeTargetMarker: Shape {
+/// read as soft chevrons matching the bar's rounded corners. Shared by
+/// the widget status bar and the main sheet's `EVChargingProgressView`;
+/// `halfWidth` / `reach` scale it to each bar's height + corner radius.
+struct ChargeTargetMarker: Shape {
     /// Target x within the rect (absolute, not a fraction).
     var centerX: CGFloat
     /// Half the marker's width at the bar edge.
