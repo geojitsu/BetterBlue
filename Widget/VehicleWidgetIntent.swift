@@ -27,6 +27,15 @@ struct VehicleWidgetIntent: WidgetConfigurationIntent {
     @Parameter(title: "Background")
     var background: WidgetBackgroundEntity?
 
+    /// Append the numeric battery / fuel percentage after the range
+    /// (e.g. "276 mi · 92%"), colored like the range. Default on, so
+    /// widgets that predate these toggles keep showing the percentage.
+    @Parameter(title: "Show EV Percentage", default: true)
+    var showEVPercentage: Bool
+
+    @Parameter(title: "Show Gas Percentage", default: true)
+    var showGasPercentage: Bool
+
     // Configurable button slots. Optional so widgets configured before
     // these parameters existed keep working — `slotButtons` falls back
     // to the classic Lock/Unlock/Start/Stop set when nothing is set.

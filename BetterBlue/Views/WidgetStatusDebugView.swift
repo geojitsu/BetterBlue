@@ -21,6 +21,8 @@ struct WidgetStatusDebugView: View {
     @State private var gas = 50.0
     @State private var locked = true
     @State private var climateOn = false
+    @State private var showEVPercent = true
+    @State private var showGasPercent = true
 
     private var data: StatusSectionData {
         StatusSectionData(
@@ -38,7 +40,9 @@ struct WidgetStatusDebugView: View {
             isLocked: locked,
             isClimateOn: climateOn,
             chargingColor: .green,
-            gasColor: .orange
+            gasColor: .orange,
+            showEVPercent: showEVPercent,
+            showGasPercent: showGasPercent
         )
     }
 
@@ -82,6 +86,10 @@ struct WidgetStatusDebugView: View {
                 Toggle("Charging", isOn: $isCharging)
                 Toggle("Locked", isOn: $locked)
                 Toggle("Climate on", isOn: $climateOn)
+                Toggle("Show EV %", isOn: $showEVPercent)
+                if isPHEV {
+                    Toggle("Show gas %", isOn: $showGasPercent)
+                }
             }
 
             Section("Values") {

@@ -24,7 +24,9 @@ struct VehicleWidgetEntryView: View {
             VehicleControlsWidget(
                 vehicle: vehicle,
                 buttons: entry.configuration.slotButtons,
-                textColor: style.textColor
+                textColor: style.textColor,
+                showEVPercent: entry.configuration.showEVPercentage,
+                showGasPercent: entry.configuration.showGasPercentage
             )
             .containerBackground(for: .widget) {
                 LinearGradient(
@@ -55,6 +57,8 @@ struct VehicleControlsWidget: View {
     let vehicle: VehicleEntity
     let buttons: [ConfiguredWidgetButton]
     let textColor: Color
+    let showEVPercent: Bool
+    let showGasPercent: Bool
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
@@ -63,6 +67,8 @@ struct VehicleControlsWidget: View {
                 vehicle: vehicle,
                 buttons: buttons,
                 textColor: textColor,
+                showEVPercent: showEVPercent,
+                showGasPercent: showGasPercent,
                 isSmall: family == .systemSmall
             )
         }
@@ -90,12 +96,17 @@ struct UnifiedVehicleWidget: View {
     let vehicle: VehicleEntity
     let buttons: [ConfiguredWidgetButton]
     let textColor: Color
+    let showEVPercent: Bool
+    let showGasPercent: Bool
     let isSmall: Bool
 
     var body: some View {
         VStack(spacing: isSmall ? 6 : 8) {
             // Vehicle header
-            VehicleHeaderView(vehicle: vehicle, textColor: textColor, isSmall: isSmall)
+            VehicleHeaderView(
+                vehicle: vehicle, textColor: textColor,
+                showEVPercent: showEVPercent, showGasPercent: showGasPercent, isSmall: isSmall
+            )
 
             // Action buttons
             VehicleButtonsView(vehicle: vehicle, buttons: buttons, isSmall: isSmall)
@@ -151,7 +162,13 @@ struct VehicleHeaderView: View {
     /// black/white for solid backgrounds, or dynamic `Color.label` for
     /// the adaptive Default.
     let textColor: Color
+    let showEVPercent: Bool
+    let showGasPercent: Bool
     let isSmall: Bool
+
+    private var statusData: StatusSectionData {
+        StatusSectionData(vehicle, showEVPercent: showEVPercent, showGasPercent: showGasPercent)
+    }
 
     var body: some View {
         Group {
@@ -179,7 +196,7 @@ struct VehicleHeaderView: View {
                 .minimumScaleFactor(0.8)
 
             VehicleStatusColumn(
-                data: StatusSectionData(vehicle), textColor: textColor, isSmall: true, leadingTime: absoluteUpdated
+                data: statusData, textColor: textColor, isSmall: true, leadingTime: absoluteUpdated
             )
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -206,7 +223,7 @@ struct VehicleHeaderView: View {
 
             Spacer(minLength: 4)
 
-            VehicleStatusColumn(data: StatusSectionData(vehicle), textColor: textColor, isSmall: false)
+            VehicleStatusColumn(data: statusData, textColor: textColor, isSmall: false)
                 .frame(maxWidth: 196, alignment: .trailing)
         }
     }
@@ -255,7 +272,7 @@ struct VehicleHeaderView: View {
 extension StatusSectionData {
     /// Projects a widget `VehicleEntity` into the plain inputs the
     /// shared status section renders.
-    init(_ vehicle: VehicleEntity) {
+    init(_ vehicle: VehicleEntity, showEVPercent: Bool = true, showGasPercent: Bool = true) {
         self.init(
             hasElectricCapability: vehicle.fuelType.hasElectricCapability,
             evRange: vehicle.evRange,
@@ -271,7 +288,9 @@ extension StatusSectionData {
             isLocked: vehicle.isLocked,
             isClimateOn: vehicle.isClimateOn,
             chargingColor: vehicle.chargingColor,
-            gasColor: vehicle.gasColor
+            gasColor: vehicle.gasColor,
+            showEVPercent: showEVPercent,
+            showGasPercent: showGasPercent
         )
     }
 }

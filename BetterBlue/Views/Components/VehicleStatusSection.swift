@@ -31,6 +31,9 @@ struct StatusSectionData {
     var isClimateOn: Bool?
     var chargingColor: Color
     var gasColor: Color
+    /// Append the numeric percentage after the EV / gas range.
+    var showEVPercent: Bool = true
+    var showGasPercent: Bool = true
 }
 
 /// Range + status line on top, a color-coded percentage bar per fuel
@@ -47,15 +50,22 @@ struct VehicleStatusColumn: View {
     /// the last-updated time, which has no room of its own there.
     var leadingTime: String?
 
-    /// One fuel axis: its color, formatted range, and fill level. EV
-    /// uses the charging color, gas uses the gas color. The EV axis gets
-    /// the richer charging bar when plugged in.
+    /// One fuel axis: its color, display label, and fill level. EV uses
+    /// the charging color, gas uses the gas color. The EV axis gets the
+    /// richer charging bar when plugged in. `label` is the range plus,
+    /// when the matching toggle is on, "· <pct>%".
     private struct Axis: Identifiable {
         let id: Int
         let color: Color
-        let range: String
+        let label: String
         let fraction: Double
         let isEV: Bool
+    }
+
+    /// Builds "<range>" or "<range> · <pct>%" depending on the toggle.
+    private func label(range: String, percent: Double?, showPercent: Bool) -> String {
+        guard showPercent, let percent else { return range }
+        return "\(range) · \(Int(percent.rounded()))%"
     }
 
     private var axes: [Axis] {
@@ -65,13 +75,15 @@ struct VehicleStatusColumn: View {
         if data.hasElectricCapability, let evRange = data.evRange {
             result.append(Axis(
                 id: 0, color: data.chargingColor,
-                range: evRange, fraction: (data.evBatteryPercentage ?? 0) / 100, isEV: true
+                label: label(range: evRange, percent: data.evBatteryPercentage, showPercent: data.showEVPercent),
+                fraction: (data.evBatteryPercentage ?? 0) / 100, isEV: true
             ))
         }
         if let gasRange = data.gasRange {
             result.append(Axis(
                 id: 1, color: data.gasColor,
-                range: gasRange, fraction: (data.gasFuelPercentage ?? 0) / 100, isEV: false
+                label: label(range: gasRange, percent: data.gasFuelPercentage, showPercent: data.showGasPercent),
+                fraction: (data.gasFuelPercentage ?? 0) / 100, isEV: false
             ))
         }
 
@@ -82,7 +94,11 @@ struct VehicleStatusColumn: View {
             result.append(Axis(
                 id: 2,
                 color: isEV ? data.chargingColor : data.gasColor,
-                range: data.rangeText,
+                label: label(
+                    range: data.rangeText,
+                    percent: data.batteryPercentage,
+                    showPercent: isEV ? data.showEVPercent : data.showGasPercent
+                ),
                 fraction: (data.batteryPercentage ?? 0) / 100,
                 isEV: isEV
             ))
@@ -101,7 +117,7 @@ struct VehicleStatusColumn: View {
                 Text(leadingTime).foregroundColor(textColor.opacity(0.7))
             }
             ForEach(axes) { axis in
-                Text(axis.range).foregroundColor(axis.color)
+                Text(axis.label).foregroundColor(axis.color)
             }
             // Charge speed isn't shown here — it lives inside the charging
             // bar (right-aligned) so a PHEV's two-range line isn't cut off.
