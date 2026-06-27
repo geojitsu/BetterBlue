@@ -40,15 +40,35 @@ triggered only by navigating to a charger via the in-car nav system.
 **Rule:** All UI copy in this fork must use "cabin preconditioning" not "battery
 preconditioning" to avoid misleading users.
 
-### Pitfall 4: Keychain migration timing
+### Pitfall 4: Keychain migration timing — RESOLVED in TASK-001
 
-`BBAccount` stores `password`, `pin`, and `serializedAuthToken` in SwiftData (unencrypted).
-This is fine for personal device sideloading protected by iOS data protection. It must
-be migrated to Keychain before any wider distribution (TestFlight, App Store).
+**Previously:** `BBAccount` stored `password`, `pin`, and `serializedAuthToken` in
+SwiftData (unencrypted, CloudKit-synced). These three fields are now Keychain-backed.
 
-The migration must handle existing SwiftData records: read existing values, write to
-Keychain, then nil out the SwiftData fields. A migration guard is needed to avoid
-re-running on fresh installs.
+**What was done (TASK-001):**
+- SwiftData backing fields renamed `_password`, `_pin`, `_serializedAuthToken` with
+  `@Attribute(originalName:)` so existing column data is preserved across the schema
+  rename (lightweight migration, no explicit migration plan required).
+- Computed properties `password`, `pin`, `serializedAuthToken` now read/write the iOS
+  Keychain via `KeychainService` (`BetterBlue/Utility/KeychainService.swift`).
+- `migrateAccountCredentials(container:)` runs once at startup (guarded by
+  `UserDefaults` key `keychain_migration_v1_complete`) and sweeps all accounts.
+- `BBAccount.removeAccount` now deletes the three Keychain items before removing the
+  SwiftData record.
+- Schema version bumped to `1.0.10`.
+
+**Remaining caveat — CloudKit multi-device:** Once the primary device migrates and
+CloudKit syncs the now-empty SwiftData fields to a secondary device, the secondary
+device has no way to self-migrate (the plaintext is gone from SwiftData). Users with
+multiple devices will need to re-enter credentials on secondary devices after first
+launch following the update. Acceptable for a personal-use fork.
+
+**Temporary-account Keychain orphans:** `AccountInfoView.checkNewAccountData` creates
+a throwaway `BBAccount` to test new credentials. Its `init` writes to Keychain
+(under its random UUID). These entries are never explicitly deleted because the test
+object is never inserted into SwiftData. Each credential-update test leaves ~2 tiny
+orphan Keychain items. Acceptable for personal use; a future cleanup could add an
+explicit `cleanupKeychain()` call to that flow.
 
 ### Pitfall 5: Simulator vs. device SwiftData paths
 

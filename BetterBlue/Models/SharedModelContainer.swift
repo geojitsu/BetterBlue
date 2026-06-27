@@ -113,6 +113,40 @@ func cleanupOrphanedVehicles(container: ModelContainer) {
     }
 }
 
+/// Migrates credential fields (`password`, `pin`, `serializedAuthToken`) from every
+/// `BBAccount` in SwiftData to the iOS Keychain. Guarded by a UserDefaults flag so
+/// it runs exactly once per device across the lifetime of the install.
+///
+/// Called synchronously during app startup, before `MainView` loads, so that the
+/// Keychain-backed computed properties on `BBAccount` are ready before any API call.
+///
+/// - Note: CloudKit multi-device caveat — once the SwiftData backing fields are
+///   cleared on the primary device and synced via CloudKit, secondary devices will
+///   receive empty fields and cannot self-migrate. Users with multiple devices will
+///   need to re-enter credentials on secondary devices after the first run on their
+///   primary device. This is an acceptable trade-off for a personal-use app.
+@MainActor
+func migrateAccountCredentials(container: ModelContainer) {
+    let migrationKey = "keychain_migration_v1_complete"
+    guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+
+    let context = container.mainContext
+    let accounts = (try? context.fetch(FetchDescriptor<BBAccount>())) ?? []
+
+    let migratedCount = accounts.filter { $0.migrateCredentialsToKeychain() }.count
+
+    if migratedCount > 0 {
+        do {
+            try context.save()
+        } catch {
+            BBLogger.error(.auth, "Keychain migration: failed to save context after migration: \(error)")
+        }
+    }
+
+    UserDefaults.standard.set(true, forKey: migrationKey)
+    BBLogger.info(.auth, "Keychain migration complete: \(migratedCount) account(s) migrated, \(accounts.count - migratedCount) already clean")
+}
+
 /// Creates a shared ModelContainer for use across main app, widget, and watch app.
 /// - Parameter enableCloudKit: Whether to enable CloudKit sync. Set to `false` for
 ///   App Intents and widgets running in the background to avoid `0xdead10cc` crashes
@@ -123,7 +157,7 @@ func createSharedModelContainer(enableCloudKit: Bool = true) throws -> ModelCont
         BBVehicle.self,
         BBHTTPLog.self,
         ClimatePreset.self
-    ], version: .init(1, 0, 9))
+    ], version: .init(1, 0, 10))
 
     let cloudKitDatabase: ModelConfiguration.CloudKitDatabase = enableCloudKit ? .automatic : .none
 

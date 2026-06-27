@@ -13,14 +13,19 @@ import SwiftData
 class BBAccount {
     var id: UUID = UUID()
     var username: String = ""
-    var password: String = ""
+    // Migration-only backing fields. These map to the original SwiftData column names
+    // so existing persisted data can be read at migration time. After
+    // migrateCredentialsToKeychain() runs they are set to empty / nil and the
+    // computed properties below (password, pin, serializedAuthToken) become the
+    // authoritative source, reading from / writing to the iOS Keychain.
+    @Attribute(originalName: "password") var _password: String = ""
     var refreshToken: String = ""
-    var pin: String = ""
+    @Attribute(originalName: "pin") var _pin: String = ""
     var brand: String = "" // Store as string, convert to/from Brand enum
     var region: String = "" // Store as string, convert to/from Region enum
     var dateCreated: Date = Date()
     var rememberMeToken: String?
-    var serializedAuthToken: String?
+    @Attribute(originalName: "serializedAuthToken") var _serializedAuthToken: String?
     var deviceId: String?
     /// Hyundai Canada connection variant (raw value). Only meaningful for
     /// Hyundai Canada accounts; nil falls back to the default (web portal).
@@ -40,6 +45,37 @@ class BBAccount {
         vehicles ?? []
     }
 
+    // MARK: - Keychain-backed computed properties
+
+    /// Account password. Reads from / writes to the iOS Keychain.
+    /// The SwiftData backing field (`_password`) is only used during the one-time
+    /// migration; after that it stays empty.
+    var password: String {
+        get { KeychainService.load(for: .password(accountId: id)) ?? "" }
+        set { KeychainService.save(newValue, for: .password(accountId: id)) }
+    }
+
+    /// Account PIN. Reads from / writes to the iOS Keychain.
+    var pin: String {
+        get { KeychainService.load(for: .pin(accountId: id)) ?? "" }
+        set { KeychainService.save(newValue, for: .pin(accountId: id)) }
+    }
+
+    /// JSON-serialized auth token. Reads from / writes to the iOS Keychain.
+    /// Setting to nil removes the Keychain item.
+    var serializedAuthToken: String? {
+        get { KeychainService.load(for: .authToken(accountId: id)) }
+        set {
+            if let value = newValue {
+                KeychainService.save(value, for: .authToken(accountId: id))
+            } else {
+                KeychainService.delete(for: .authToken(accountId: id))
+            }
+        }
+    }
+
+    // MARK: - Transient state
+
     @Transient
     private var api: (any APIClientProtocol)?
     @Transient
@@ -49,14 +85,14 @@ class BBAccount {
     @Transient
     private var pendingMFAError: APIError?
 
-    /// Auth token with automatic persistence. Reads from cache first, then deserializes from storage.
-    /// When set, automatically serializes to storage.
+    /// Auth token with automatic persistence. Reads from in-memory cache first,
+    /// then deserializes from the Keychain-backed `serializedAuthToken`.
+    /// When set, automatically serializes back to the Keychain.
     private var authToken: AuthToken? {
         get {
             if let cached = cachedAuthToken {
                 return cached
             }
-            // Try to deserialize from persisted storage
             guard let serialized = serializedAuthToken,
                   let data = serialized.data(using: .utf8),
                   let token = try? JSONDecoder().decode(AuthToken.self, from: data) else {
@@ -80,12 +116,51 @@ class BBAccount {
     init(username: String, password: String, refreshToken: String, pin: String, brand: Brand, region: Region) {
         id = UUID()
         self.username = username
-        self.password = password
+        self._password = ""   // Keychain is the authoritative store; backing field stays empty
         self.refreshToken = refreshToken
-        self.pin = pin
+        self._pin = ""        // same
         self.brand = brand.rawValue
         self.region = region.rawValue
         dateCreated = Date()
+        // Persist credentials to Keychain immediately so that the computed
+        // getters above return the correct values from the first access.
+        KeychainService.save(password, for: .password(accountId: id))
+        KeychainService.save(pin, for: .pin(accountId: id))
+    }
+
+    // MARK: - One-time Keychain migration
+
+    /// Moves credential data that was previously stored in SwiftData into the Keychain.
+    /// Called once per app lifetime from `migrateAccountCredentials(container:)` in
+    /// SharedModelContainer.swift. Returns true when any data was actually moved so the
+    /// caller knows it needs to save the model context.
+    ///
+    /// Safe to call when the backing fields are already empty (fresh install or a device
+    /// that received cleared values via CloudKit sync): the method is a no-op in that case.
+    @discardableResult
+    func migrateCredentialsToKeychain() -> Bool {
+        var didMigrate = false
+
+        if !_password.isEmpty {
+            KeychainService.save(_password, for: .password(accountId: id))
+            _password = ""
+            didMigrate = true
+        }
+        if !_pin.isEmpty {
+            KeychainService.save(_pin, for: .pin(accountId: id))
+            _pin = ""
+            didMigrate = true
+        }
+        if let token = _serializedAuthToken {
+            KeychainService.save(token, for: .authToken(accountId: id))
+            _serializedAuthToken = nil
+            didMigrate = true
+        }
+
+        if didMigrate {
+            BBLogger.info(.auth, "BBAccount: migrated credentials to Keychain for account \(id)")
+        }
+        return didMigrate
     }
 
     // Computed properties to convert to existing types
@@ -712,11 +787,17 @@ extension BBAccount {
 extension BBAccount {
     @MainActor
     static func removeAccount(_ account: BBAccount, modelContext: ModelContext) {
+        // Remove Keychain entries before deleting the SwiftData record so the
+        // account UUID is still available for key construction.
+        KeychainService.delete(for: .password(accountId: account.id))
+        KeychainService.delete(for: .pin(accountId: account.id))
+        KeychainService.delete(for: .authToken(accountId: account.id))
+
         modelContext.delete(account)
 
         do {
             try modelContext.save()
-            BBLogger.info(.api, "BBAccount: Removed account from SwiftData")
+            BBLogger.info(.api, "BBAccount: Removed account from SwiftData and Keychain")
         } catch {
             BBLogger.error(.api, "BBAccount: Failed to remove account from SwiftData: \(error)")
         }
@@ -725,13 +806,15 @@ extension BBAccount {
     @MainActor
     static func updateAccount(_ account: BBAccount, password: String, pin: String,
                               refreshToken: String, modelContext: ModelContext) {
+        // password and pin write through to Keychain via computed setters.
         account.password = password
         account.pin = pin
+        // refreshToken is a plain SwiftData field and still needs a save().
         account.refreshToken = refreshToken
 
         do {
             try modelContext.save()
-            BBLogger.info(.api, "BBAccount: Updated account in SwiftData")
+            BBLogger.info(.api, "BBAccount: Updated account credentials")
         } catch {
             BBLogger.error(.api, "BBAccount: Failed to update account in SwiftData: \(error)")
         }

@@ -60,6 +60,11 @@ struct BetterBlueApp: App {
             cleanupOrphanedVehicles(container: container)
             cleanupOrphanedClimatePresets(container: container)
 
+            // One-time migration: move password/pin/authToken from SwiftData
+            // to the iOS Keychain before MainView loads. Must run before any
+            // BBAccount.initialize() call so credentials are in Keychain first.
+            migrateAccountCredentials(container: container)
+
             return .ready(container)
         } catch {
             BBLogger.error(.app, "Failed to create ModelContainer: \(error)")
