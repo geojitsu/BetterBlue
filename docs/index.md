@@ -22,7 +22,7 @@ BetterBlue + BetterBlueKit architecture. Monthly cost: $0.
 
 ## Repository
 
-- **This fork**: [geojitsu/BetterBlue](https://github.com/geojitsu/BetterBlue)
+- **This fork**: [geojitsu/BetterBlueToo](https://github.com/geojitsu/BetterBlueToo)
 
 ## Upstream
 
