@@ -52,13 +52,21 @@ class BBAccount {
     /// migration; after that it stays empty.
     var password: String {
         get { KeychainService.load(for: .password(accountId: id)) ?? "" }
-        set { KeychainService.save(newValue, for: .password(accountId: id)) }
+        set {
+            if !KeychainService.save(newValue, for: .password(accountId: id)) {
+                BBLogger.error(.auth, "BBAccount: Keychain write failed for password on account \(id)")
+            }
+        }
     }
 
     /// Account PIN. Reads from / writes to the iOS Keychain.
     var pin: String {
         get { KeychainService.load(for: .pin(accountId: id)) ?? "" }
-        set { KeychainService.save(newValue, for: .pin(accountId: id)) }
+        set {
+            if !KeychainService.save(newValue, for: .pin(accountId: id)) {
+                BBLogger.error(.auth, "BBAccount: Keychain write failed for pin on account \(id)")
+            }
+        }
     }
 
     /// JSON-serialized auth token. Reads from / writes to the iOS Keychain.
@@ -67,7 +75,9 @@ class BBAccount {
         get { KeychainService.load(for: .authToken(accountId: id)) }
         set {
             if let value = newValue {
-                KeychainService.save(value, for: .authToken(accountId: id))
+                if !KeychainService.save(value, for: .authToken(accountId: id)) {
+                    BBLogger.error(.auth, "BBAccount: Keychain write failed for authToken on account \(id)")
+                }
             } else {
                 KeychainService.delete(for: .authToken(accountId: id))
             }
@@ -124,8 +134,12 @@ class BBAccount {
         dateCreated = Date()
         // Persist credentials to Keychain immediately so that the computed
         // getters above return the correct values from the first access.
-        KeychainService.save(password, for: .password(accountId: id))
-        KeychainService.save(pin, for: .pin(accountId: id))
+        if !KeychainService.save(password, for: .password(accountId: id)) {
+            BBLogger.error(.auth, "BBAccount: Keychain write failed for password during account creation (id: \(id))")
+        }
+        if !KeychainService.save(pin, for: .pin(accountId: id)) {
+            BBLogger.error(.auth, "BBAccount: Keychain write failed for pin during account creation (id: \(id))")
+        }
     }
 
     // MARK: - One-time Keychain migration
@@ -142,19 +156,29 @@ class BBAccount {
         var didMigrate = false
 
         if !_password.isEmpty {
-            KeychainService.save(_password, for: .password(accountId: id))
-            _password = ""
-            didMigrate = true
+            if KeychainService.save(_password, for: .password(accountId: id)) {
+                _password = ""
+                didMigrate = true
+            } else {
+                // Retain the backing field so the next launch can retry the migration.
+                BBLogger.error(.auth, "BBAccount: Keychain write failed for password on account \(id) — retaining backing field for retry")
+            }
         }
         if !_pin.isEmpty {
-            KeychainService.save(_pin, for: .pin(accountId: id))
-            _pin = ""
-            didMigrate = true
+            if KeychainService.save(_pin, for: .pin(accountId: id)) {
+                _pin = ""
+                didMigrate = true
+            } else {
+                BBLogger.error(.auth, "BBAccount: Keychain write failed for pin on account \(id) — retaining backing field for retry")
+            }
         }
         if let token = _serializedAuthToken {
-            KeychainService.save(token, for: .authToken(accountId: id))
-            _serializedAuthToken = nil
-            didMigrate = true
+            if KeychainService.save(token, for: .authToken(accountId: id)) {
+                _serializedAuthToken = nil
+                didMigrate = true
+            } else {
+                BBLogger.error(.auth, "BBAccount: Keychain write failed for authToken on account \(id) — retaining backing field for retry")
+            }
         }
 
         if didMigrate {

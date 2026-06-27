@@ -7,6 +7,12 @@
 //  checks (charging, location) can read credentials when the screen is off after
 //  the user has unlocked the device at least once since boot.
 //
+//  Items are scoped to the shared App Group access group (group.com.betterblue.shared)
+//  so that widget and LiveActivity extensions running in a separate process can read
+//  the same credentials. The com.apple.security.application-groups entitlement (already
+//  present on all targets) is sufficient for App Group Keychain sharing — no separate
+//  keychain-access-groups entitlement is required.
+//
 
 import Foundation
 import Security
@@ -37,21 +43,31 @@ enum KeychainKey {
 // MARK: - KeychainService
 
 /// Static helpers for reading and writing BetterBlue credentials in the Keychain.
-/// All operations are synchronous and return nil (rather than throwing) on failure
-/// so callers do not need to handle unlikely Keychain errors in hot paths.
+/// `save()` returns a Bool so callers can detect write failures and avoid silently
+/// discarding credentials that were never actually persisted.
 enum KeychainService {
+
+    /// Shared App Group used as the Keychain access group.
+    /// All BetterBlue targets declare this group in com.apple.security.application-groups,
+    /// which enables cross-process Keychain sharing for widgets and extensions.
+    static let accessGroup = "group.com.betterblue.shared"
 
     // MARK: Save
 
     /// Writes `value` to the Keychain for `key`.
     /// If an item already exists it is updated in-place; otherwise a new item is added.
-    static func save(_ value: String, for key: KeychainKey) {
-        guard let data = value.data(using: .utf8) else { return }
+    /// - Returns: `true` on success, `false` if the Security framework returned an error.
+    ///   Callers MUST treat `false` as a signal that the credential was NOT persisted
+    ///   and should NOT discard any in-memory copy.
+    @discardableResult
+    static func save(_ value: String, for key: KeychainKey) -> Bool {
+        guard let data = value.data(using: .utf8) else { return false }
 
         let searchQuery: [CFString: Any] = [
-            kSecClass:       kSecClassGenericPassword,
-            kSecAttrService: KeychainKey.service,
-            kSecAttrAccount: key.accountString,
+            kSecClass:           kSecClassGenericPassword,
+            kSecAttrService:     KeychainKey.service,
+            kSecAttrAccount:     key.accountString,
+            kSecAttrAccessGroup: KeychainService.accessGroup,
         ]
 
         let updateAttributes: [CFString: Any] = [
@@ -71,13 +87,16 @@ enum KeychainService {
                     "KeychainService: add failed for \(key.accountString, privacy: .public) " +
                     "status=\(addStatus)"
                 )
+                return false
             }
         } else if updateStatus != errSecSuccess {
             AppLogger.auth.error(
                 "KeychainService: update failed for \(key.accountString, privacy: .public) " +
                 "status=\(updateStatus)"
             )
+            return false
         }
+        return true
     }
 
     // MARK: Load
@@ -85,11 +104,12 @@ enum KeychainService {
     /// Returns the stored string for `key`, or `nil` if not found or on any error.
     static func load(for key: KeychainKey) -> String? {
         let query: [CFString: Any] = [
-            kSecClass:       kSecClassGenericPassword,
-            kSecAttrService: KeychainKey.service,
-            kSecAttrAccount: key.accountString,
-            kSecReturnData:  true,
-            kSecMatchLimit:  kSecMatchLimitOne,
+            kSecClass:           kSecClassGenericPassword,
+            kSecAttrService:     KeychainKey.service,
+            kSecAttrAccount:     key.accountString,
+            kSecAttrAccessGroup: KeychainService.accessGroup,
+            kSecReturnData:      true,
+            kSecMatchLimit:      kSecMatchLimitOne,
         ]
 
         var result: AnyObject?
@@ -108,9 +128,10 @@ enum KeychainService {
     /// Removes the item for `key` from the Keychain. Silent no-op if not found.
     static func delete(for key: KeychainKey) {
         let query: [CFString: Any] = [
-            kSecClass:       kSecClassGenericPassword,
-            kSecAttrService: KeychainKey.service,
-            kSecAttrAccount: key.accountString,
+            kSecClass:           kSecClassGenericPassword,
+            kSecAttrService:     KeychainKey.service,
+            kSecAttrAccount:     key.accountString,
+            kSecAttrAccessGroup: KeychainService.accessGroup,
         ]
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
