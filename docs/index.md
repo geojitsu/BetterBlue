@@ -20,6 +20,10 @@ three targeted features to the upstream app:
 No backend changes are required. All three features operate entirely within the existing
 BetterBlue + BetterBlueKit architecture. Monthly cost: $0.
 
+## Repository
+
+- **This fork**: [geojitsu/BetterBlue](https://github.com/geojitsu/BetterBlue)
+
 ## Upstream
 
 - Main app: [schmidtwmark/BetterBlue](https://github.com/schmidtwmark/BetterBlue)
